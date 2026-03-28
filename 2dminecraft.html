@@ -1,1287 +1,1295 @@
 <!DOCTYPE html>
-<!-- saved from url=(0050)https://github.com/studychannel/2dminecraft/upload -->
-<html lang="en" data-color-mode="auto" data-light-theme="light" data-dark-theme="dark" data-a11y-animated-images="system" data-a11y-link-underlines="true" class="js-focus-visible" data-js-focus-visible="" data-turbo-loaded=""><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><style type="text/css">.turbo-progress-bar {
-  position: fixed;
-  display: block;
-  top: 0;
-  left: 0;
-  height: 3px;
-  background: #0076ff;
-  z-index: 2147483647;
-  transition:
-    width 300ms ease-out,
-    opacity 150ms 150ms ease-in;
-  transform: translate3d(0, 0, 0);
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CraftWorld Infinite</title>
+<style>
+/* Add this inside your <style> tag */
+canvas { touch-action: none; /* Prevents pull-to-refresh and scrolling on mobile */ }
+
+#mobile-ui {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+  pointer-events: none; z-index: 10; font-family: sans-serif;
 }
-</style><style>
-:root {
-  --fontStack-monospace: "Monaspace Neon", ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace !important;
+.m-btn {
+  pointer-events: auto; position: absolute; background: rgba(0,0,0,0.4); 
+  color: white; border: 2px solid rgba(255,255,255,0.2); border-radius: 50%; 
+  width: 60px; height: 60px; font-size: 24px; user-select: none; 
+  -webkit-user-select: none; display: flex; justify-content: center; align-items: center;
+}
+.m-btn:active { background: rgba(255,255,255,0.5); }
+
+/* Position the buttons */
+#b-left { bottom: 30px; left: 20px; }
+#b-right { bottom: 30px; left: 100px; }
+#b-up { bottom: 100px; left: 60px; }
+#b-atk { bottom: 30px; right: 100px; }
+#b-place { bottom: 30px; right: 20px; }
+#b-eat { bottom: 100px; right: 60px; }
+
+/* Hide on devices that have a physical mouse */
+@media (hover: hover) and (pointer: fine) { 
+  #mobile-ui { display: none; } 
 }
 </style>
+</head>
+<body>
+<canvas id="g"></canvas>
+<div id="mobile-ui">
+  <div class="m-btn" id="b-left">◀</div>
+  <div class="m-btn" id="b-right">▶</div>
+  <div class="m-btn" id="b-up">▲</div>
+  <div class="m-btn" id="b-atk">⚔️</div>
+  <div class="m-btn" id="b-place">🧱</div>
+  <div class="m-btn" id="b-eat">🍗</div>
+</div>
+<script>
+'use strict';
 
+/* ============ CONSTANTS ============ */
+const BS = 32, CHUNK_W = 16, WH = 80;
+const GRAV = 0.4, SPD = 3.8, JUMP = -9.5, DAY = 18000;
 
+/* ============ BLOCKS ============ */
+const B = {AIR:0,GRASS:1,DIRT:2,STONE:3,BEDROCK:4,LOG:5,LEAVES:6,SAND:7,
+  COAL:8,IRON:9,GOLD:10,DIAMOND:11,WATER:12,GRAVEL:13,PLANKS:14,
+  COBBLE:15,GLASS:16,TNT:17,TORCH:18,CACTUS:19,SNOW:20,MUSHROOM:21,CLAY:22};
 
+const BD = {
+  [B.AIR]:      {name:'Air',         solid:0,hard:0,    color:null},
+  [B.GRASS]:    {name:'Grass',       solid:1,hard:1.5,  color:'#7D5A2A',top:'#3E8A23',out:'#2D6B1A'},
+  [B.DIRT]:     {name:'Dirt',        solid:1,hard:1,    color:'#7D5A2A',top:'#7D5A2A',out:'#5A3E1A'},
+  [B.STONE]:    {name:'Stone',       solid:1,hard:5,    color:'#7F7F7F',out:'#5A5A5A',drop:B.COBBLE},
+  [B.BEDROCK]:  {name:'Bedrock',     solid:1,hard:999,  color:'#3B3B3B',out:'#2A2A2A'},
+  [B.LOG]:      {name:'Log',         solid:1,hard:3,    color:'#5C3A1E',top:'#7B5D3A',out:'#3B2210'},
+  [B.LEAVES]:   {name:'Leaves',      solid:1,hard:0.5,  color:'#2D7A0A',out:'#1E5A05'},
+  [B.SAND]:     {name:'Sand',        solid:1,hard:1,    color:'#E0C87A',out:'#C4AE5E'},
+  [B.COAL]:     {name:'Coal Ore',    solid:1,hard:5,    color:'#7F7F7F',out:'#5A5A5A',spots:'#1A1A1A'},
+  [B.IRON]:     {name:'Iron Ore',    solid:1,hard:6,    color:'#7F7F7F',out:'#5A5A5A',spots:'#D4A07A'},
+  [B.GOLD]:     {name:'Gold Ore',    solid:1,hard:7,    color:'#7F7F7F',out:'#5A5A5A',spots:'#FFD700'},
+  [B.DIAMOND]:  {name:'Diamond Ore', solid:1,hard:9,    color:'#7F7F7F',out:'#5A5A5A',spots:'#00E5FF'},
+  [B.WATER]:    {name:'Water',       solid:0,hard:0,    color:'rgba(30,100,200,0.6)'},
+  [B.GRAVEL]:   {name:'Gravel',      solid:1,hard:1.5,  color:'#9A9A9A',out:'#707070'},
+  [B.PLANKS]:   {name:'Planks',      solid:1,hard:2,    color:'#C4A35A',out:'#A08040'},
+  [B.COBBLE]:   {name:'Cobblestone', solid:1,hard:5,    color:'#808080',out:'#606060'},
+  [B.GLASS]:    {name:'Glass',       solid:1,hard:1,    color:'rgba(180,220,255,0.28)'},
+  [B.TNT]:      {name:'TNT',         solid:1,hard:0.5,  color:'#CC2200',out:'#880000'},
+  [B.TORCH]:    {name:'Torch',       solid:0,hard:0.2,  color:'#FF9900'},
+  [B.CACTUS]:   {name:'Cactus',      solid:1,hard:1,    color:'#2D7A0A',out:'#1A5A00'},
+  [B.SNOW]:     {name:'Snow',        solid:1,hard:0.5,  color:'#F0F8FF',top:'#FFFFFF',out:'#C0D8F0'},
+  [B.MUSHROOM]: {name:'Mushroom',    solid:0,hard:0.2,  color:'#AA3322'},
+  [B.CLAY]:     {name:'Clay',        solid:1,hard:2,    color:'#9BA3A3',out:'#7A8282'},
+};
 
-  
-    
-  
-  
-  
-  
-  
-  
+/* ============ FOOD ============ */
+const FOODS = {
+  apple:      {name:'Apple',        restore:4, color:'#DD2200',icon:'🍎'},
+  porkchop:   {name:'Porkchop',     restore:8, color:'#CC5533',icon:'🥩'},
+  beef:       {name:'Beef',         restore:8, color:'#AA3322',icon:'🥩'},
+  raw_chicken:{name:'Raw Chicken',  restore:6, color:'#DDAA77',icon:'🍗'},
+  mushroom_s: {name:'Mushroom Stew',restore:6, color:'#AA5533',icon:'🍲'},
+  bread:      {name:'Bread',        restore:5, color:'#D4A844',icon:'🍞'},
+  mushroom:   {name:'Mushroom',     restore:3, color:'#AA3322',icon:'🍄'},
+};
 
-  
+/* ============ RECIPES ============ */
+const RECIPES = [
+  // --- Materials ---
+  {cat:'Materials',name:'Planks x4',       result:{type:'block',id:B.PLANKS,  count:4},         req:[{id:B.LOG,  count:1}]},
+  {cat:'Materials',name:'Torches x8',      result:{type:'block',id:B.TORCH,   count:8},         req:[{id:B.LOG,  count:1},{id:B.COAL,count:1}]},
+  {cat:'Materials',name:'Glass x4',        result:{type:'block',id:B.GLASS,   count:4},         req:[{id:B.SAND, count:4}]},
+  {cat:'Materials',name:'TNT',             result:{type:'block',id:B.TNT,     count:1},         req:[{id:B.SAND, count:5},{id:B.COAL,count:2}]},
+  // --- Swords ---
+  {cat:'Weapons',  name:'Wooden Sword',    result:{type:'weapon',id:'w_sword', damage:4, dur:60,  count:1,name:'Wooden Sword'},    req:[{id:B.PLANKS,count:2},{id:B.LOG,count:1}]},
+  {cat:'Weapons',  name:'Stone Sword',     result:{type:'weapon',id:'s_sword', damage:6, dur:131, count:1,name:'Stone Sword'},     req:[{id:B.COBBLE,count:2},{id:B.PLANKS,count:1}]},
+  {cat:'Weapons',  name:'Iron Sword',      result:{type:'weapon',id:'i_sword', damage:8, dur:250, count:1,name:'Iron Sword'},      req:[{id:B.IRON,  count:2},{id:B.PLANKS,count:1}]},
+  {cat:'Weapons',  name:'Diamond Sword',   result:{type:'weapon',id:'d_sword', damage:10,dur:1561,count:1,name:'Diamond Sword'},   req:[{id:B.DIAMOND,count:2},{id:B.PLANKS,count:1}]},
+  {cat:'Weapons',  name:'Bow',             result:{type:'weapon',id:'bow',     damage:5, dur:384, count:1,name:'Bow',ranged:true}, req:[{id:B.LOG,  count:3},{id:B.PLANKS,count:2}]},
+  // --- Tools ---
+  {cat:'Tools',    name:'Wooden Pickaxe',  result:{type:'tool',  id:'w_pick',  speed:2,  dur:60,  count:1,name:'Wood Pickaxe'},    req:[{id:B.PLANKS,count:3},{id:B.LOG,count:2}]},
+  {cat:'Tools',    name:'Stone Pickaxe',   result:{type:'tool',  id:'s_pick',  speed:3.5,dur:131, count:1,name:'Stone Pickaxe'},   req:[{id:B.COBBLE,count:3},{id:B.PLANKS,count:2}]},
+  {cat:'Tools',    name:'Iron Pickaxe',    result:{type:'tool',  id:'i_pick',  speed:5,  dur:250, count:1,name:'Iron Pickaxe'},    req:[{id:B.IRON,  count:3},{id:B.PLANKS,count:2}]},
+  {cat:'Tools',    name:'Wooden Axe',      result:{type:'tool',  id:'w_axe',   speed:2,  dur:60,  count:1,name:'Wood Axe'},        req:[{id:B.PLANKS,count:3},{id:B.LOG,count:2}]},
+  {cat:'Tools',    name:'Stone Axe',       result:{type:'tool',  id:'s_axe',   speed:3.5,dur:131, count:1,name:'Stone Axe'},       req:[{id:B.COBBLE,count:3},{id:B.PLANKS,count:2}]},
+  {cat:'Tools',    name:'Iron Axe',        result:{type:'tool',  id:'i_axe',   speed:5,  dur:250, count:1,name:'Iron Axe'},        req:[{id:B.IRON,  count:3},{id:B.PLANKS,count:2}]},
+  // --- Food ---
+  {cat:'Food',     name:'Bread x2',        result:{type:'food',  id:'bread',   count:2,name:'Bread',       restore:5,color:'#D4A844',icon:'🍞'}, req:[{id:B.SAND,count:3}]},
+  {cat:'Food',     name:'Mushroom Stew',   result:{type:'food',  id:'mushroom_s',count:1,name:'Mushroom Stew',restore:6,color:'#AA5533',icon:'🍲'}, req:[{id:B.MUSHROOM,count:2},{id:B.PLANKS,count:1}]},
+];
 
-  <link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/light-0c8222dcd7a4f9b7.css"><link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/dark-fc6eec18532c3ae0.css"><link data-color-theme="light_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/light_high_contrast-51c0c6e0c085cc0f.css"><link data-color-theme="light_colorblind" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/light_colorblind-4dd12c5689d6b012.css"><link data-color-theme="light_colorblind_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/light_colorblind_high_contrast-dfa0c9e22ba6ba2b.css"><link data-color-theme="light_tritanopia" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/light_tritanopia-9fd9c8859395d1a8.css"><link data-color-theme="light_tritanopia_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/light_tritanopia_high_contrast-9c32304a2a8ac631.css"><link data-color-theme="dark_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_high_contrast-96d7b2bab5a6ae4e.css"><link data-color-theme="dark_colorblind" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_colorblind-0c6ca283d4d35cea.css"><link data-color-theme="dark_colorblind_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_colorblind_high_contrast-2dc46b4919fae81e.css"><link data-color-theme="dark_tritanopia" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_tritanopia-271332ec9362e8d3.css"><link data-color-theme="dark_tritanopia_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_tritanopia_high_contrast-eb5bb84e91d6d553.css"><link data-color-theme="dark_dimmed" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_dimmed-f3aa862f2ac7ead2.css"><link data-color-theme="dark_dimmed_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_dimmed_high_contrast-206b6b93f856629b.css">
+/* ============ CHUNK SYSTEM ============ */
+const chunks = new Map();
+function gcx(x)  { return Math.floor(x / CHUNK_W); }
+function glx(x)  { return ((x % CHUNK_W) + CHUNK_W) % CHUNK_W; }
+function ens(cx) { if(!chunks.has(cx)) genChunk(cx); }
+function gB(x,y) {
+  if(y<0) return B.AIR;
+  if(y>=WH) return B.BEDROCK;
+  const cx=gcx(x); ens(cx);
+  return chunks.get(cx)[y*CHUNK_W+glx(x)];
+}
+function sB(x,y,id) {
+  if(y<0||y>=WH) return;
+  const cx=gcx(x); ens(cx);
+  chunks.get(cx)[y*CHUNK_W+glx(x)]=id;
+}
 
-  <style type="text/css">
-    :root {
-      --tab-size-preference: 4;
+/* ============ NOISE ============ */
+function hsh(n) {
+  n=((Math.abs(n|0))&0x7fffffff);
+  n=((n>>16)^n)*0x45d9f3b|0;
+  n=((n>>16)^n)*0x45d9f3b|0;
+  n=(n>>16)^n;
+  return (n>>>0)/0xFFFFFFFF;
+}
+function snN(x,sc,sd) {
+  const ix=Math.floor(x/sc), fx=x/sc-ix, sx=fx*fx*(3-2*fx);
+  return hsh(ix+sd*9973)*(1-sx)+hsh(ix+1+sd*9973)*sx;
+}
+function getBiome(x) {
+  const n=snN(x,180,99);
+  if(n<0.28) return 'desert';
+  if(n>0.72) return 'mountain';
+  if(n>0.55) return 'forest';
+  return 'plains';
+}
+function tH(x) {
+  const b=getBiome(x);
+  let base=38,a1=12,a2=5;
+  if(b==='desert')   {base=42;a1=4; a2=2;}
+  if(b==='mountain') {base=26;a1=24;a2=8;}
+  if(b==='forest')   {base=36;a1=10;a2=4;}
+  return Math.max(8,Math.min(WH-8,Math.floor(base+snN(x,48,1)*a1+snN(x,20,2)*a2+snN(x,8,3)*2)));
+}
+
+/* ============ WORLD GEN ============ */
+function genChunk(cx) {
+  const d=new Uint8Array(CHUNK_W*WH);
+  chunks.set(cx,d);
+  for(let lx=0;lx<CHUNK_W;lx++) {
+    const x=cx*CHUNK_W+lx, bio=getBiome(x), sy=tH(x);
+    for(let y=0;y<WH;y++) {
+      let bl=B.AIR;
+      if(y>=WH-1) { bl=B.BEDROCK; }
+      else if(y>sy) {
+        const dep=y-sy;
+        if(dep<=3) bl=(bio==='desert')?B.SAND:B.DIRT;
+        else {
+          bl=B.STONE;
+          const r=hsh(x*1000+y+111);
+          if(dep>38&&r<0.012) bl=B.DIAMOND;
+          else if(dep>24&&r<0.025) bl=B.GOLD;
+          else if(dep>10&&r<0.05)  bl=B.IRON;
+          else if(r<0.07) bl=B.COAL;
+          if(hsh(x*777+y*333+22)<0.025) bl=B.GRAVEL;
+          if(sy>=40&&dep>=2&&dep<=5&&hsh(x*444+y+33)<0.22) bl=B.CLAY;
+        }
+      } else if(y===sy) {
+        if(bio==='desert') bl=B.SAND;
+        else if(bio==='mountain'&&sy<24) bl=B.SNOW;
+        else bl=B.GRASS;
+      }
+      d[y*CHUNK_W+lx]=bl;
     }
-
-    pre, code {
-      tab-size: var(--tab-size-preference);
+    // Water fill
+    if(sy>=40) for(let y=sy+1;y<=44;y++) if(d[y*CHUNK_W+lx]===B.AIR) d[y*CHUNK_W+lx]=B.WATER;
+    // Surface features
+    const sr=hsh(x*31337+555);
+    const canT=lx>=2&&lx<=CHUNK_W-3;
+    if(canT&&bio==='forest'&&d[sy*CHUNK_W+lx]===B.GRASS&&sr<0.12)  placeTree(d,cx,x,sy-1);
+    else if(canT&&bio==='plains'&&d[sy*CHUNK_W+lx]===B.GRASS&&sr<0.05) placeTree(d,cx,x,sy-1);
+    else if(bio==='desert'&&sr<0.05&&sy<40) {
+      const ch=2+Math.floor(hsh(x*12345+1)*2);
+      for(let i=0;i<ch;i++) { const cy=sy-i; if(cy>=0&&d[cy*CHUNK_W+lx]===B.AIR) d[cy*CHUNK_W+lx]=B.CACTUS; }
     }
-  </style>
-
-    <link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/primer-primitives-10bf9dd67e3d70bd.css">
-    <link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/primer-0fcd9af82350aeda.css">
-    <link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/global-a40b6ece39d70d4a.css">
-    <link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/github-b02a278369fa132e.css">
-  <link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/repository-6ec84ae2261fecf8.css">
-
-  
-
-  <script type="application/json" id="client-env">{"locale":"en","featureFlags":["a11y_status_checks_ruleset","actions_custom_images_storage_billing_ui_visibility","actions_image_version_event","actions_scheduled_workflow_timezone_enabled","actions_workflow_language_service_allow_case_function","alternate_user_config_repo","arianotify_comprehensive_migration","batch_suggested_changes","billing_discount_threshold_notification","billing_ui_budget_pagination_enabled","close_pr_side_panel","codemirror_inp_optimizations","codeowners_validation_in_diff","codespaces_prebuild_region_target_update","coding_agent_model_selection","coding_agent_model_selection_all_skus","comment_viewer_copy_raw_markdown","comments_panel_issue_comments","contentful_primer_code_blocks","copilot_agent_image_upload","copilot_agent_snippy","copilot_api_agentic_issue_marshal_yaml","copilot_ask_mode_dropdown","copilot_chat_attach_multiple_images","copilot_chat_clear_model_selection_for_default_change","copilot_chat_disable_model_picker_while_streaming","copilot_chat_enable_tool_call_logs","copilot_chat_explain_error_user_model","copilot_chat_file_redirect","copilot_chat_input_commands","copilot_chat_opening_thread_switch","copilot_chat_reduce_quota_checks","copilot_chat_repository_picker","copilot_chat_search_bar_redirect","copilot_chat_selection_attachments","copilot_chat_vision_in_claude","copilot_chat_vision_preview_gate","copilot_cli_install_cta","copilot_code_review_batch_apply_suggestions","copilot_coding_agent_free_users_exp","copilot_coding_agent_task_response","copilot_custom_copilots","copilot_custom_copilots_feature_preview","copilot_duplicate_thread","copilot_extensions_hide_in_dotcom_chat","copilot_extensions_removal_on_marketplace","copilot_features_sql_server_logo","copilot_features_zed_logo","copilot_file_block_ref_matching","copilot_ftp_hyperspace_upgrade_prompt","copilot_icebreakers_experiment_dashboard","copilot_icebreakers_experiment_hyperspace","copilot_immersive_embedded","copilot_immersive_file_block_transition_open","copilot_immersive_file_preview_keep_mounted","copilot_immersive_job_result_preview","copilot_immersive_layout_routes","copilot_immersive_structured_model_picker","copilot_immersive_task_hyperlinking","copilot_immersive_task_within_chat_thread","copilot_issue_list_show_more","copilot_mc_cli_resume_any_users_task","copilot_mission_control_always_send_integration_id","copilot_mission_control_cli_resume_with_task_id","copilot_mission_control_custom_agent_group","copilot_mission_control_decoupled_mode","copilot_mission_control_decoupled_mode_agent_tooltip","copilot_mission_control_initial_data_spinner","copilot_mission_control_post_session_chat_model_picker","copilot_mission_control_scroll_to_bottom_button","copilot_mission_control_task_alive_updates","copilot_org_policy_page_focus_mode","copilot_premium_request_quotas","copilot_redirect_header_button_to_agents","copilot_resource_panel","copilot_scroll_preview_tabs","copilot_share_active_subthread","copilot_spaces_ga","copilot_spaces_individual_policies_ga","copilot_spaces_pagination","copilot_spark_empty_state","copilot_spark_handle_nil_friendly_name","copilot_swe_agent_hide_model_picker_if_only_auto","copilot_swe_agent_pr_comment_model_picker","copilot_swe_agent_use_subagents","copilot_task_api_github_rest_style","copilot_unconfigured_is_inherited","copilot_usage_metrics_ga","copilot_workbench_slim_line_top_tabs","custom_instructions_file_references","custom_properties_consolidate_default_value_input","dashboard_add_updated_desc","dashboard_indexeddb_caching","dashboard_lists_max_age_filter","dashboard_universe_2025","dashboard_universe_2025_feedback_dialog","dead_click_detection","fgpat_permissions_selector_redesign","flex_cta_groups_mvp","github_models_scheduled_hydro_events","global_nav_react","global_nav_unified_payload","hide_groups_list_for_few_groups","hyperspace_2025_logged_out_batch_1","hyperspace_2025_logged_out_batch_2","hyperspace_2025_logged_out_batch_3","ipm_global_transactional_message_agents","ipm_global_transactional_message_copilot","ipm_global_transactional_message_issues","ipm_global_transactional_message_prs","ipm_global_transactional_message_repos","ipm_global_transactional_message_spaces","issue_cca_modal_open","issue_cca_visualization","issue_fields_global_search","issue_fields_visibility_settings","issues_dashboard_inp_optimization","issues_diff_based_label_updates","issues_expanded_file_types","issues_index_semantic_search","issues_lazy_load_comment_box_suggestions","issues_react_bots_timeline_pagination","issues_react_chrome_container_query_fix","issues_react_include_bots_in_pickers","issues_react_prohibit_title_fallback","issues_react_ui_feedback","issues_search_type_gql","landing_pages_ninetailed","landing_pages_web_vitals_tracking","lifecycle_label_name_updates","load_paginated_threads_on_diff","marketing_pages_search_explore_provider","memex_default_issue_create_repository","memex_live_update_hovercard","memex_mwl_filter_field_delimiter","memex_roadmap_drag_style","merge_status_header_feedback","mission_control_retry_on_401","nux_dashboard_refresh_scoped_portal","oauth_authorize_clickjacking_protection","open_agent_session_in_vscode_insiders","open_agent_session_in_vscode_stable","pr_sfv_new_diff_fetch","primer_react_action_menu_display_in_viewport_inside_dialog","primer_react_css_has_selector_perf","primer_react_spinner_synchronize_animations","prs_checks_react","prs_conversations_react","prs_docked_side_panel","prs_live_updates_issue_comments","prx_files","prx_merge_status_button_alt_logic","pull_request_edit_button_redesign","pull_request_files_accurate_size_estimates","pull_request_files_virtualization","pull_request_merge_status_button","pull_request_virtualization_extended_limit","react_blob_overlay","repository_suggester_elastic_search","ruleset_deletion_confirmation","sample_network_conn_type","secret_scanning_pattern_alerts_link","session_logs_ungroup_reasoning_text","site_features_copilot_universe","site_homepage_collaborate_video","spark_prompt_secret_scanning","spark_server_connection_status","suppress_automated_browser_vitals","suppress_non_representative_vitals","viewscreen_sandbox","webp_support","workbench_store_readonly"],"login":"studychannel","copilotApiOverrideUrl":"https://api.individual.githubcopilot.com"}</script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/wp-runtime-ed508127a539a20f.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/85924-d72bd3bf2ebf2b33.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/28839-c0b8ec9e4855e70d.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/34646-e2c38a6244e0673e.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/environment-d9bacfd0e507cc58.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/runtime-helpers-9ca289a20b4287f3.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/2966-7fae197fcc122033.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/96232-81264b2e484eeea3.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/41013-98ec62b138074b3c.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/51210-4f6b60f1e56caf0b.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/77313-833d857459e22419.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/23039-9d3ed8a305267b36.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/8601-bd8c9578beeca5fa.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/46740-6ff37d25440dfd5f.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/52375-7184639d75711668.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/github-elements-17007c6e1a0ff4e7.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/element-registry-0b32e5b1d96edd71.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/react-core-eff3f3e27186f71c.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/react-lib-3f8a185bb97e4f4c.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/7053-9ff0fc016f8d6134.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/79039-13dc534ba9c6a63e.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/61110-91a6e672e6c52371.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/2887-7374f895742e2de6.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/26533-be3434b1ad736595.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/97745-17bf40209ad1b441.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/89155-cd29998a39b55887.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/50686-203ca12c697307e6.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/46779-a5e6403e1f8c73d8.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/46287-4caff6a8b1d9f9be.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/2498-97555f2269e8a9bd.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/1108-d04e2e16dc98da37.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/18597-6dc8f1f774696932.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/15625-05373890466bf366.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/48527-5de266b1da5c2e34.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/28703-c1456f1aa61b245d.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/99328-91354dc331fd4cdd.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/37943-3c619d65dd869b67.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/91184-657c34dc2b380c4c.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/97232-829cc8b566d31458.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/87774-cb19ae155ee3c918.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/27493-4c94010ef4ae1e22.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/56889-3812304955862655.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/2013-126bbbb468be7e3b.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/81564-fd44bec50cee3386.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/behaviors-e6ee0d9220c00fe9.js.download" defer="defer"></script>
-<link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/react-core.364eade98ee7744f.module.css">
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/81863-518132d704f3d667.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/notifications-global-f520baa344c4ccaf.js.download" defer="defer"></script>
-  
-  <script crossorigin="anonymous" type="module" src="./2dminecraft_files/primer-react-49d0d59066dc96d1.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/octicons-react-ca419a820093f0c2.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/82920-dc06a067ce609d1d.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/37869-a6edd40fc0f7a5b7.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/68751-dc22dc5f8bf5a264.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/75999-66911a4f8078f8d4.js.download" defer="defer"></script>
-
-
-
-
-
-
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/5289-4a32f44cef6e4684.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/18157-0cb9e716adcf86b5.js.download" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="./2dminecraft_files/notifications-subscriptions-menu-4874950c6c2906e3.js.download" defer="defer"></script>
-<link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/primer-react-css.da05312be74eac16.module.css">
-<link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/notifications-subscriptions-menu.710847f5b3216d30.module.css">
-
-
-  
-
-
-
-  
-  
-  
-  
-
-    
-  
-
-
-  
-
-
-    
-
-
-  
-  
-
-  
-  
-
-    
-
-
-
-
-
-
-
-  
-
-  
-
-
-
-
-    
-
-  
-
-    
-
-    
-
-      
-
-      
-
-    
-    
-    
-
-      
-  
-  
-
-
-      
-      
-
-      
-
-      
-
-
-      
-      
-      
-
-        
-
-
-  <meta http-equiv="x-pjax-version" content="c1de8ab04ff31336e20ace8fdce64832afe5069bf456045fffd1a5c7e4507a8b" data-turbo-track="reload">
-  <meta http-equiv="x-pjax-csp-version" content="568c098497d98702bac1642a2a853732a047a6ced28eabd3e15d50041a890235" data-turbo-track="reload">
-  <meta http-equiv="x-pjax-css-version" content="2a11dc2eae08fab707a6ec4f9b210809c57fcffc99ec34a2e6f0046296cc07e6" data-turbo-track="reload">
-  <meta http-equiv="x-pjax-js-version" content="630d8b00b9650984e288302f44cc14c439058de689aae3efd81309196af4d0a8" data-turbo-track="reload">
-
-  
-
-      
-
-  
-
-
-
-    
-
-    
-  
-
-
-  
-
-  
-
-  
-  
-
-  
-  
-  
-
-
-
-
-  
-  
-
-  
-
-  <link rel="stylesheet" type="text/css" href="./2dminecraft_files/81758.c3d0cf69fea2352a.module.css" crossorigin="anonymous"><link rel="stylesheet" type="text/css" href="./2dminecraft_files/38963.f70dfea92b138b01.module.css" crossorigin="anonymous"><link rel="stylesheet" type="text/css" href="./2dminecraft_files/10973.23b6b7b72692bb9f.module.css" crossorigin="anonymous"><link rel="stylesheet" type="text/css" href="./2dminecraft_files/53839.52201ac8c146881f.module.css" crossorigin="anonymous"><style id="ms-consent-banner-main-styles">.w8hcgFksdo30C8w-bygqu{color:#000}.ydkKdaztSS0AeHWIeIHsQ a{color:#0067B8}.erL690_8JwUW-R4bJRcfl{background-color:#EBEBEB;border:none;color:#000}.erL690_8JwUW-R4bJRcfl:enabled:hover{color:#000;background-color:#DBDBDB;box-shadow:0px 4px 10px rgba(0,0,0,0.25);border:none}.erL690_8JwUW-R4bJRcfl:enabled:focus{background-color:#DBDBDB;box-shadow:0px 4px 10px rgba(0,0,0,0.25);border:2px solid #000}.erL690_8JwUW-R4bJRcfl:disabled{opacity:1;color:rgba(0,0,0,0.2);background-color:rgba(0,0,0,0.2);border:none}._1zNQOqxpBFSokeCLGi_hGr{border:none;background-color:#0067B8;color:#fff}._1zNQOqxpBFSokeCLGi_hGr:enabled:hover{color:#fff;background-color:#0067B8;box-shadow:0px 4px 10px rgba(0,0,0,0.25);border:none}._1zNQOqxpBFSokeCLGi_hGr:enabled:focus{background-color:#0067B8;box-shadow:0px 4px 10px rgba(0,0,0,0.25);border:2px solid #000}._1zNQOqxpBFSokeCLGi_hGr:disabled{opacity:1;color:rgba(0,0,0,0.2);background-color:rgba(0,120,215,0.2);border:none}._23tra1HsiiP6cT-Cka-ycB{position:relative;display:flex;z-index:9999;width:100%;background-color:#F2F2F2;justify-content:space-between;text-align:left}div[dir="rtl"]._23tra1HsiiP6cT-Cka-ycB{text-align:right}._1Upc2NjY8AlDn177YoVj0y{margin:0;padding-left:5%;padding-top:8px;padding-bottom:8px}div[dir="rtl"] ._1Upc2NjY8AlDn177YoVj0y{margin:0;padding:8px 5% 8px 0;float:none}._23tra1HsiiP6cT-Cka-ycB svg{fill:none;max-width:none;max-height:none}._1V_hlU-7jdtPiooHMu89BB{display:table-cell;padding:12px;width:24px;height:24px;font-family:Segoe UI, SegoeUI, Arial, sans-serif;font-style:normal;font-weight:normal;font-size:24px;line-height:0}.f6QKJD7fhSbnJLarTL-W-{display:table-cell;vertical-align:middle;padding:0;font-family:Segoe UI, SegoeUI, Arial, sans-serif;font-style:normal;font-weight:normal;font-size:13px;line-height:16px}.f6QKJD7fhSbnJLarTL-W- a{text-decoration:underline}._2j0fmugLb1FgYz6KPuB91w{display:inline-block;margin-left:5%;margin-right:5%;min-width:40%;min-width:calc((150px + 3 * 4px) * 2 + 150px);min-width:-webkit-fit-content;min-width:-moz-fit-content;min-width:fit-content;align-self:center;position:relative}._1XuCi2WhiqeWRUVp3pnFG3{margin:4px;padding:5px;min-width:150px;min-height:36px;vertical-align:top;cursor:pointer;font-family:Segoe UI, SegoeUI, Arial, sans-serif;font-style:normal;font-weight:normal;font-size:15px;line-height:20px;text-align:center}._1XuCi2WhiqeWRUVp3pnFG3:focus{box-sizing:border-box}._1XuCi2WhiqeWRUVp3pnFG3:disabled{cursor:not-allowed}._2bvsb3ubApyZ0UGoQA9O9T{display:block;position:fixed;z-index:10000;top:0;left:0;width:100%;height:100%;background-color:rgba(255,255,255,0.6);overflow:auto;text-align:left}div[dir="rtl"]._2bvsb3ubApyZ0UGoQA9O9T{text-align:right}div[dir="rtl"] ._2bvsb3ubApyZ0UGoQA9O9T{left:auto;right:0}.AFsJE948muYyzCMktdzuk{position:relative;top:8%;margin-bottom:40px;margin-left:auto;margin-right:auto;box-sizing:border-box;width:640px;background-color:#fff;border:1px solid #0067B8}._3kWyBRbW_dgnMiEyx06Fu4{float:right;z-index:1;margin:2px;padding:12px;border:none;cursor:pointer;font-family:Segoe UI, SegoeUI, Arial, sans-serif;font-style:normal;font-weight:normal;font-size:13px;line-height:13px;display:flex;align-items:center;text-align:center;color:#666;background-color:#fff}div[dir="rtl"] ._3kWyBRbW_dgnMiEyx06Fu4{margin:2px;padding:12px;float:left}.uCYvKvHXrhjNgflv1VqdD{position:static;margin-top:36px;margin-left:36px;margin-right:36px}._17pX1m9O_W--iZbDt3Ta5r{margin-top:0;margin-bottom:12px;font-family:Segoe UI, SegoeUI, Arial, sans-serif;font-style:normal;font-weight:600;font-size:20px;line-height:24px;text-transform:none}._1kBkHQ1V1wu3kl-YcLgUr6{height:446px;overflow:auto}._20_nXDf6uFs9Q6wxRXG-I-{margin-top:0;font-family:Segoe UI, SegoeUI, Arial, sans-serif;font-style:normal;font-weight:normal;font-size:15px;line-height:20px}._20_nXDf6uFs9Q6wxRXG-I- a{text-decoration:underline}dl._2a0NH_GDQEQe5Ynfo7suVH{margin-top:36px;margin-bottom:0;padding:0;list-style:none;text-transform:none}dt._3j_LCPv7fyXv3A8FIXVwZ4{margin-top:20px;float:none;font-family:Segoe UI, SegoeUI, Arial, sans-serif;font-style:normal;font-weight:600;font-size:18px;line-height:24px;list-style:none}.k-vxTGFbdq1aOZB2HHpjh{margin:0;padding:0;border:none}._2Bucyy75c_ogoU1g-liB5R{margin:0;padding:0;border-bottom:none;font-family:Segoe UI, SegoeUI, Arial, sans-serif;font-style:normal;font-weight:600;font-size:18px;line-height:24px;text-transform:none}._63gwfzV8dclrsl2cfd90r{display:inline-block;margin-top:0;margin-bottom:13px;font-family:Segoe UI, SegoeUI, Arial, sans-serif;font-style:normal;font-weight:normal;font-size:15px;line-height:20px}._1l8wM_4mRYGz3Iu7l3BZR7{display:block}._2UE03QS02aZGkslegN_F-i{display:inline-block;position:relative;left:5px;margin-bottom:13px;margin-right:34px;padding:3px}div[dir="rtl"] ._2UE03QS02aZGkslegN_F-i{margin:0 0 13px 34px;padding:3px;float:none}div[dir="rtl"] ._2UE03QS02aZGkslegN_F-i{left:auto;right:5px}._23tra1HsiiP6cT-Cka-ycB *::before,._2bvsb3ubApyZ0UGoQA9O9T *::before,._23tra1HsiiP6cT-Cka-ycB *::after,._2bvsb3ubApyZ0UGoQA9O9T *::after{box-sizing:inherit}._1HSFn0HzGo6w4ADApV8-c4{outline:2px solid rgba(0,0,0,0.8)}input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2{display:inline-block;position:relative;margin-top:0;margin-left:0;margin-right:0;height:0;width:0;border-radius:0;cursor:pointer;outline:none;box-sizing:border-box;-webkit-appearance:none;-moz-appearance:none;appearance:none}input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2+label::before{display:block;position:absolute;top:5px;left:3px;height:19px;width:19px;content:"";border-radius:50%;border:1px solid #000;background-color:#fff}div[dir="rtl"] input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2+label::before{left:auto;right:3px}input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2:not(:disabled)+label:hover::before{border:1px solid #0067B8}input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2:not(:disabled)+label:hover::after{display:block;position:absolute;top:10px;left:8px;height:9px;width:9px;content:"";border-radius:50%;background-color:rgba(0,0,0,0.8)}div[dir="rtl"] input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2:not(:disabled)+label:hover::after{left:auto;right:8px}input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2:not(:disabled)+label:focus::before{border:1px solid #0067B8}input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2:not(:disabled)+label:focus::after{display:block;position:absolute;top:10px;left:8px;height:9px;width:9px;content:"";border-radius:50%;background-color:#000}div[dir="rtl"] input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2:not(:disabled)+label:focus::after{left:auto;right:8px}input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2:checked+label::after{display:block;position:absolute;top:10px;left:8px;height:9px;width:9px;content:"";border-radius:50%;background-color:#000}div[dir="rtl"] input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2:checked+label::after{left:auto;right:8px}input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2:disabled+label{cursor:not-allowed}input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2:disabled+label::before{border:1px solid rgba(0,0,0,0.2);background-color:rgba(0,0,0,0.2)}._3RJzeL3l9Rl_lAQEm6VwdX{display:block;position:static;float:right;margin-top:0;margin-bottom:0;margin-left:19px;margin-right:0;padding-top:0;padding-bottom:0;padding-left:8px;padding-right:0;width:80%;width:calc(100% - 19px);font-family:Segoe UI, SegoeUI, Arial, sans-serif;font-style:normal;font-weight:normal;font-size:15px;line-height:20px;text-transform:none;cursor:pointer;box-sizing:border-box}div[dir="rtl"] ._3RJzeL3l9Rl_lAQEm6VwdX{margin:0 19px 0 0;padding:0 8px 0 0;float:left}.nohp3sIG12ZBhzcMnPala{margin-top:20px;margin-bottom:48px}._2uhaEsmeotZ3P-M0AXo2kF{padding:0;width:278px;height:36px;cursor:pointer;font-family:Segoe UI, SegoeUI, Arial, sans-serif;font-style:normal;font-weight:normal;font-size:15px;line-height:20px;text-align:center}._2uhaEsmeotZ3P-M0AXo2kF:focus{box-sizing:border-box}._2uhaEsmeotZ3P-M0AXo2kF:disabled{cursor:not-allowed}._3tOu1FJ59c_xz_PmI1lKV5{float:right;padding:0;width:278px;height:36px;cursor:pointer;font-family:Segoe UI, SegoeUI, Arial, sans-serif;font-style:normal;font-weight:normal;font-size:15px;line-height:20px;text-align:center}._3tOu1FJ59c_xz_PmI1lKV5:focus{box-sizing:border-box}._3tOu1FJ59c_xz_PmI1lKV5:disabled{cursor:not-allowed}div[dir="rtl"] ._3tOu1FJ59c_xz_PmI1lKV5{margin:0;padding:0;float:left}@media only screen and (max-width: 768px){._2j0fmugLb1FgYz6KPuB91w,._1Upc2NjY8AlDn177YoVj0y{padding-top:8px;padding-bottom:12px;padding-left:3.75%;padding-right:3.75%;margin:0;width:92.5%}._23tra1HsiiP6cT-Cka-ycB{display:block}._1XuCi2WhiqeWRUVp3pnFG3{margin-bottom:8px;margin-left:0;margin-right:0;width:100%}._2bvsb3ubApyZ0UGoQA9O9T{overflow:hidden}.AFsJE948muYyzCMktdzuk{top:1.8%;width:93.33%;height:96.4%;overflow:hidden}.uCYvKvHXrhjNgflv1VqdD{margin-top:24px;margin-left:24px;margin-right:24px;height:100%}._1kBkHQ1V1wu3kl-YcLgUr6{height:62%;height:calc(100% - 188px);min-height:50%}._2uhaEsmeotZ3P-M0AXo2kF{width:100%}._3tOu1FJ59c_xz_PmI1lKV5{margin-bottom:12px;margin-left:0;width:100%}div[dir="rtl"] ._3tOu1FJ59c_xz_PmI1lKV5{margin:0 0 12px 0;padding:0;float:none}}@media only screen and (max-width: 768px) and (orientation: landscape), only screen and (max-height: 260px), only screen and (max-width: 340px){.AFsJE948muYyzCMktdzuk{overflow:auto}}@media only screen and (max-height: 260px), only screen and (max-width: 340px){._1XuCi2WhiqeWRUVp3pnFG3{min-width:0}._3kWyBRbW_dgnMiEyx06Fu4{padding:3%}.uCYvKvHXrhjNgflv1VqdD{margin-top:3%;margin-left:3%;margin-right:3%}._17pX1m9O_W--iZbDt3Ta5r{margin-bottom:3%}._1kBkHQ1V1wu3kl-YcLgUr6{height:calc(79% - 64px)}.nohp3sIG12ZBhzcMnPala{margin-top:5%;margin-bottom:10%}._3tOu1FJ59c_xz_PmI1lKV5{margin-bottom:3%}div[dir="rtl"] ._3tOu1FJ59c_xz_PmI1lKV5{margin:0 0 3% 0;padding:0;float:none}}
-</style><style type="text/css" id="ms-consent-banner-theme-styles">._23tra1HsiiP6cT-Cka-ycB {
-            background-color: #24292f !important;
-        }.w8hcgFksdo30C8w-bygqu {
-            color: #ffffff !important;
-        }.ydkKdaztSS0AeHWIeIHsQ a {
-            color: #d8b9ff !important;
-        }._2bvsb3ubApyZ0UGoQA9O9T {
-            background-color: rgba(23, 23, 23, 0.8) !important;
-        }.AFsJE948muYyzCMktdzuk {
-            background-color: #24292f !important;
-            border: 1px solid #d8b9ff !important;
-        }._3kWyBRbW_dgnMiEyx06Fu4 {
-            color: #d8b9ff !important;
-            background-color: #24292f !important;
-        }._1zNQOqxpBFSokeCLGi_hGr {
-            border: 1px solid #ffffff !important;
-            background-color: #ffffff !important;
-            color: #1f2328 !important;
-        }._1zNQOqxpBFSokeCLGi_hGr:enabled:hover {
-            color: #1f2328 !important;
-            background-color: #d8b9ff !important;
-            box-shadow: none !important;
-            border: 1px solid transparent !important;
-        }._1zNQOqxpBFSokeCLGi_hGr:enabled:focus {
-            background-color: #d8b9ff !important;
-            box-shadow: none !important;
-            border: 2px solid #ffffff !important;
-        }._1zNQOqxpBFSokeCLGi_hGr:disabled {
-            opacity: 0.5 !important;
-            color: #1f2328 !important;
-            background-color: #ffffff !important;
-            border: 1px solid transparent !important;
-        }.erL690_8JwUW-R4bJRcfl {
-            border: 1px solid #eaeef2 !important;
-            background-color: #32383f !important;
-            color: #ffffff !important;
-        }.erL690_8JwUW-R4bJRcfl:enabled:hover {
-            color: #ffffff !important;
-            background-color: #24292f !important;
-            box-shadow: none !important;
-            border: 1px solid #ffffff !important;
-        }.erL690_8JwUW-R4bJRcfl:enabled:focus {
-            background-color: #24292f !important;
-            box-shadow: none !important;
-            border: 2px solid #6e7781 !important;
-        }.erL690_8JwUW-R4bJRcfl:disabled {
-            opacity: 0.5 !important;
-            color: #ffffff !important;
-            background-color: #424a53 !important;
-            border: 1px solid #6e7781 !important;
-        }input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2 + label::before {
-            border: 1px solid #d8b9ff !important;
-            background-color: #24292f !important;
-        }._1HSFn0HzGo6w4ADApV8-c4 {
-            outline: 2px solid #ffffff !important;
-        }input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2:checked + label::after {
-            background-color: #d8b9ff !important;
-        }input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2 + label:hover::before {
-            border: 1px solid #ffffff !important;
-        }input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2 + label:hover::after {
-            background-color: #ffffff !important;
-        }input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2 + label:focus::before {
-            border: 1px solid #ffffff !important;
-        }input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2 + label:focus::after {
-            background-color: #d8b9ff !important;
-        }input[type="radio"]._1dp8Vp5m3HwAqGx8qBmFV2:disabled + label::before {
-            border: 1px solid rgba(227, 227, 227, 0.2) !important;
-            background-color: rgba(227, 227, 227, 0.2) !important;
-        }</style><link rel="stylesheet" type="text/css" href="./2dminecraft_files/61975.b129f60ae2849f5b.module.css" crossorigin="anonymous"><link rel="stylesheet" type="text/css" href="./2dminecraft_files/26107.41ae2139f7c50636.module.css" crossorigin="anonymous"><link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/editor.a0fb2ba6761df3c1.module.css"><link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/code-2d31826944fd3be8.css"><script type="module" src="./2dminecraft_files/15272-ad5fb8cca4dc4180.js.download"></script><script type="module" src="./2dminecraft_files/50938-14e2342a61983e31.js.download"></script><script type="module" src="./2dminecraft_files/46502-7eb25d0f2d08f496.js.download"></script><script type="module" src="./2dminecraft_files/40752-4caebed5ca9e34d7.js.download"></script><script type="module" src="./2dminecraft_files/3624-354b1a34523760ac.js.download"></script><script type="module" src="./2dminecraft_files/66231-90a11d7658c3832a.js.download"></script><script type="module" src="./2dminecraft_files/26497-5815c1ce9a63d716.js.download"></script><script type="module" src="./2dminecraft_files/editor-25e955c21c5701f4.js.download"></script><script type="module" src="./2dminecraft_files/19262-4c3b05232fb597c5.js.download"></script><script type="module" src="./2dminecraft_files/42890-126b39498dc2a1cb.js.download"></script><script type="module" src="./2dminecraft_files/70206-8ad353124c962a56.js.download"></script><script type="module" src="./2dminecraft_files/19930-5c005d8c44bf85a0.js.download"></script><script type="module" src="./2dminecraft_files/repositories-a9837b55b984b2ad.js.download"></script><link rel="dns-prefetch" href="https://github.githubassets.com/"><link rel="dns-prefetch" href="https://avatars.githubusercontent.com/"><link rel="dns-prefetch" href="https://github-cloud.s3.amazonaws.com/"><link rel="dns-prefetch" href="https://user-images.githubusercontent.com/"><link rel="preconnect" href="https://github.githubassets.com/" crossorigin=""><link rel="preconnect" href="https://avatars.githubusercontent.com/"><title>Upload files · studychannel/2dminecraft</title><meta name="fetch-nonce" content="v2:4a757d34-4b05-5af3-27e5-e33a941f2018"><meta name="current-catalog-service-hash" content="f3abb0cc802f3d7b95fc8762b94bdcb13bf39634c40c357301c4aa1d67a256fb"><link rel="assets" href="https://github.githubassets.com/"><meta name="google-site-verification" content="Apib7-x98H0j5cPqHWwSMm6dNU4GmODRoqxLiDzdx9I"><meta name="octolytics-url" content="https://collector.github.com/github/collect"><meta name="octolytics-actor-id" content="271505912"><meta name="octolytics-actor-login" content="studychannel"><meta name="octolytics-actor-hash" content="8fb9a097bd12fa698853a8da34ac43b6cfae2d47326ad2e87535033c7312eba0"><meta name="user-login" content="studychannel"><link rel="sudo-modal" href="https://github.com/sessions/sudo_modal"><meta name="viewport" content="width=device-width"><meta name="description" content="Contribute to studychannel/2dminecraft development by creating an account on GitHub."><link rel="search" type="application/opensearchdescription+xml" href="https://github.com/opensearch.xml" title="GitHub"><link rel="fluid-icon" href="https://github.com/fluidicon.png" title="GitHub"><meta property="fb:app_id" content="1401488693436528"><meta name="apple-itunes-app" content="app-id=1477376905, app-argument=https://github.com/studychannel/2dminecraft"><meta name="twitter:image" content="https://opengraph.githubassets.com/47c696975e157469ce1c6032fc15f31385652472e47b7b8fdc300b9291a33773/studychannel/2dminecraft"><meta name="twitter:site" content="@github"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="studychannel/2dminecraft"><meta name="twitter:description" content="Contribute to studychannel/2dminecraft development by creating an account on GitHub."><meta property="og:image" content="https://opengraph.githubassets.com/47c696975e157469ce1c6032fc15f31385652472e47b7b8fdc300b9291a33773/studychannel/2dminecraft"><meta property="og:image:alt" content="Contribute to studychannel/2dminecraft development by creating an account on GitHub."><meta property="og:image:width" content="1200"><meta property="og:image:height" content="600"><meta property="og:site_name" content="GitHub"><meta property="og:type" content="object"><meta property="og:title" content="studychannel/2dminecraft"><meta property="og:url" content="https://github.com/studychannel/2dminecraft"><meta property="og:description" content="Contribute to studychannel/2dminecraft development by creating an account on GitHub."><link rel="shared-web-socket" href="wss://alive.github.com/_sockets/u/271505912/ws?session=eyJ2IjoiVjMiLCJ1IjoyNzE1MDU5MTIsInMiOjIwMjg3OTY2NDUsImMiOjEyMTkxNTgyMDYsInQiOjE3NzQ3MTEyMjV9--900265b0ccd8cc3f5b93376f490eee4c93a103d11b6bfeae4b3b65d7961657de" data-refresh-url="/_alive" data-session-id="d0c01bf4bc0622a1ab964dc4984dc34e1cdaea79835a352305fadeba3e2c36f0"><link rel="shared-web-socket-src" href="https://github.com/assets-cdn/worker/socket-worker-312129489ba60057.js"><link rel="service-worker-src" href="https://github.com/assets-cdn/worker/service-worker-dae625aa82e7855a.js?current_user=studychannel&amp;errors_url=https%3A%2F%2Fapi.github.com%2F_private%2Fbrowser%2Ferrors&amp;release=51d2e33e3d1e4839c3ced5f8e35c7a47d3a60f32&amp;actor_id=271505912&amp;is_staff=false&amp;analytics_collector_url=https%3A%2F%2Fcollector.github.com%2Fgithub%2Fcollect"><meta name="hostname" content="github.com"><meta name="keyboard-shortcuts-preference" content="all"><meta name="hovercards-preference" content="true"><meta name="announcement-preference-hovercard" content="true"><meta name="expected-hostname" content="github.com"><meta name="go-import" content="github.com/studychannel/2dminecraft git https://github.com/studychannel/2dminecraft.git"><meta name="octolytics-dimension-user_id" content="271505912"><meta name="octolytics-dimension-user_login" content="studychannel"><meta name="octolytics-dimension-repository_id" content="1194599911"><meta name="octolytics-dimension-repository_nwo" content="studychannel/2dminecraft"><meta name="octolytics-dimension-repository_public" content="true"><meta name="octolytics-dimension-repository_is_fork" content="false"><meta name="octolytics-dimension-repository_network_root_id" content="1194599911"><meta name="octolytics-dimension-repository_network_root_nwo" content="studychannel/2dminecraft"><meta name="turbo-body-classes" content="logged-in env-production page-responsive"><meta name="disable-turbo" content="false"><meta name="browser-stats-url" content="https://api.github.com/_private/browser/stats"><meta name="browser-errors-url" content="https://api.github.com/_private/browser/errors"><meta name="release" content="51d2e33e3d1e4839c3ced5f8e35c7a47d3a60f32"><meta name="ui-target" content="full"><link rel="mask-icon" href="https://github.githubassets.com/assets/pinned-octocat-093da3e6fa40.svg" color="#000000"><link rel="alternate icon" class="js-site-favicon" type="image/png" href="https://github.githubassets.com/favicons/favicon-dark.png"><link rel="icon" class="js-site-favicon" type="image/svg+xml" href="https://github.githubassets.com/favicons/favicon-dark.svg" data-base-href="https://github.githubassets.com/favicons/favicon"><meta name="theme-color" content="#1e2327"><meta name="color-scheme" content="light dark"><meta name="msapplication-TileImage" content="/windows-tile.png"><meta name="msapplication-TileColor" content="#ffffff"><link rel="manifest" href="https://github.com/manifest.json" crossorigin="use-credentials"><meta name="route-pattern" content="/:user_id/:repository/upload(/:name)(/*path)(.:format)" data-turbo-transient=""><meta name="route-controller" content="repository_uploads" data-turbo-transient=""><meta name="route-action" content="index" data-turbo-transient=""><meta name="selected-link" value="repo_source" data-turbo-transient=""><meta name="analytics-location" content="/&lt;user-name&gt;/&lt;repo-name&gt;/repository_uploads/index" data-turbo-transient=""><meta name="request-id" content="CE81:2F9146:D007D7:1008036:69C7F1BB" data-turbo-transient=""><meta name="html-safe-nonce" content="0560343a62acfa336ba4b70de0a0f57701ab6548236a008c961c28d2bf0f2e71" data-turbo-transient=""><meta name="visitor-payload" content="eyJyZWZlcnJlciI6Imh0dHBzOi8vZ2l0aHViLmNvbS9zdHVkeWNoYW5uZWwvMmRtaW5lY3JhZnQiLCJyZXF1ZXN0X2lkIjoiQ0U4MToyRjkxNDY6RDAwN0Q3OjEwMDgwMzY6NjlDN0YxQkIiLCJ2aXNpdG9yX2lkIjoiNzY4OTM5ODM4NTUyNjU5NzY2MCIsInJlZ2lvbl9lZGdlIjoiY2VudHJhbGluZGlhIiwicmVnaW9uX3JlbmRlciI6ImlhZCJ9" data-turbo-transient=""><meta name="visitor-hmac" content="536dad3060d3450392e9bace256b41f45418cde6d20067a376c7f20f01d77ba6" data-turbo-transient=""><meta name="github-keyboard-shortcuts" content="repository,copilot" data-turbo-transient=""><meta name="hovercard-subject-tag" content="repository:1194599911" data-turbo-transient=""><meta name="turbo-cache-control" content="no-preview" data-turbo-transient=""></head>
-
-  <body class="logged-in env-production page-responsive" style="word-wrap: break-word;" data-dialog-scroll-optimized="">
-    <div data-turbo-body="" class="logged-in env-production page-responsive" style="word-wrap: break-word;">
-      <div id="__primerPortalRoot__" role="region" style="z-index: 1000; position: absolute; width: 100%;" data-turbo-permanent=""></div>
-      
-
-    <div class="position-relative header-wrapper js-header-wrapper ">
-      <a href="https://github.com/studychannel/2dminecraft/upload#start-of-content" data-skip-target-assigned="false" class="tmp-p-3 color-bg-accent-emphasis color-fg-on-emphasis show-on-focus js-skip-to-content">Skip to content</a>
-
-      <span data-view-component="true" class="progress-pjax-loader Progress position-fixed width-full">
-    <span style="width: 0%;" data-view-component="true" class="Progress-item progress-pjax-loader-bar left-0 top-0 color-bg-accent-emphasis"></span>
-</span>      
-      
-      <link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/primer-react-css.da05312be74eac16.module.css">
-<link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/keyboard-shortcuts-dialog.76a47c12aca9fa78.module.css">
-
-<react-partial partial-name="keyboard-shortcuts-dialog" data-ssr="false" data-attempted-ssr="false" data-react-profiling="false" data-catalyst="" class="loaded">
-  
-  <script type="application/json" data-target="react-partial.embeddedData">{"props":{"docsUrl":"https://docs.github.com/get-started/accessibility/keyboard-shortcuts"}}</script>
-  <div data-target="react-partial.reactRoot"><div class="d-none"></div><script type="application/json" id="__PRIMER_DATA__r_0___">{"resolvedServerColorMode":"night"}</script></div>
-</react-partial>
-
-
-
-
-
-      
-
-          
-
-                  <link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/primer-react-css.da05312be74eac16.module.css">
-<link crossorigin="anonymous" media="all" rel="stylesheet" href="./2dminecraft_files/global-nav-bar.28744a875044f950.module.css">
-
-<react-partial partial-name="global-nav-bar" data-ssr="true" data-attempted-ssr="true" data-react-profiling="false" data-catalyst="" class="loaded">
-  
-  <script type="application/json" data-target="react-partial.embeddedData">{"props":{"contextRegion":{"crumbs":[{"crumb_type":"user","label":"studychannel","is_root":false,"href":"/studychannel"},{"crumb_type":"repository","label":"2dminecraft","is_root":false,"href":"/studychannel/2dminecraft"}],"localNavigation":[{"id":"code","icon":"code","label":"Code","href":"/studychannel/2dminecraft","selectedLinks":["repo_source","repo_downloads","repo_commits","repo_releases","repo_tags","repo_branches","repo_packages","repo_deployments","repo_attestations"],"popoverTarget":false,"commandId":"repositories:go-to-code","reactNav":{"appTarget":"code-view","anchor":"code-view-repo-link"},"turboNav":{"frame":"repo-content-turbo-frame"}},{"id":"issues","icon":"issue-opened","label":"Issues","href":"/studychannel/2dminecraft/issues","selectedLinks":["repo_issues","repo_labels","repo_milestones"],"count":0,"popoverTarget":false,"commandId":"repositories:go-to-issues","reactNav":{"appTarget":"issues-react","anchor":null},"turboNav":{"frame":"repo-content-turbo-frame"}},{"id":"pull-requests","icon":"git-pull-request","label":"Pull requests","href":"/studychannel/2dminecraft/pulls","selectedLinks":["repo_pulls","checks"],"count":0,"popoverTarget":false,"commandId":"repositories:go-to-pull-requests","reactNav":{"appTarget":null,"anchor":null},"turboNav":{"frame":"repo-content-turbo-frame"}},{"id":"actions","icon":"play","label":"Actions","href":"/studychannel/2dminecraft/actions","selectedLinks":["repo_actions"],"popoverTarget":false,"commandId":"repositories:go-to-actions","reactNav":{"appTarget":null,"anchor":null},"turboNav":{"frame":"repo-content-turbo-frame"}},{"id":"projects","icon":"table","label":"Projects","href":"/studychannel/2dminecraft/projects","selectedLinks":["repo_projects","new_repo_project","repo_project"],"popoverTarget":false,"commandId":"repositories:go-to-projects","reactNav":{"appTarget":null,"anchor":null},"turboNav":{"frame":"repo-content-turbo-frame"}},{"id":"wiki","icon":"book","label":"Wiki","href":"/studychannel/2dminecraft/wiki","selectedLinks":["repo_wiki"],"popoverTarget":false,"commandId":"repositories:go-to-wiki","reactNav":{"appTarget":null,"anchor":null},"turboNav":{"frame":"repo-content-turbo-frame"}},{"id":"security","icon":"shield","label":"Security","href":"/studychannel/2dminecraft/security","selectedLinks":["security","overview","alerts","policy","token_scanning","code_scanning"],"count":0,"popoverTarget":false,"commandId":"repositories:go-to-security","reactNav":{"appTarget":null,"anchor":null},"turboNav":{"frame":"repo-content-turbo-frame"}},{"id":"insights","icon":"graph","label":"Insights","href":"/studychannel/2dminecraft/pulse","selectedLinks":["repo_graphs","repo_contributors","dependency_graph","dependabot_updates","pulse","people","community"],"popoverTarget":false,"commandId":"repositories:go-to-insights","reactNav":{"appTarget":null,"anchor":null},"turboNav":{"frame":"repo-content-turbo-frame"}},{"id":"settings","icon":"gear","label":"Settings","href":"/studychannel/2dminecraft/settings","selectedLinks":["code_review_limits","code_quality","codespaces_repository_settings","collaborators","custom_tabs","github_models_repo_settings","hooks","integration_installations","interaction_limits","issue_template_editor","key_links_settings","license_policy","notifications","repo_announcements","repo_branch_settings","repo_custom_properties","repo_keys_settings","repo_pages_settings","repo_protected_tags_settings","repo_rule_insights","repo_rule_insights_dashboard","repo_rules_bypass_requests","repo_rulesets","repo_settings_copilot_coding_guidelines","repo_settings_copilot_content_exclusion","repo_settings_copilot_swe_agent","repo_settings","reported_content","repository_actions_settings_add_new_runner","repository_actions_settings_general","repository_actions_settings_runner_details","repository_actions_settings_runners","repository_actions_settings","repository_actions_settings_policies","repository_actions_settings_oidc_configuration","repository_environments","role_details","secrets_settings_actions","secrets_settings_agents","secrets_settings_codespaces","secrets_settings_dependabot","secrets","security_analysis","security_products"],"popoverTarget":false,"commandId":"repositories:go-to-settings","reactNav":{"appTarget":null,"anchor":null},"turboNav":{"frame":"repo-content-turbo-frame"}}],"localNavigationUpdateChannel":"eyJjIjoicmVwbzoxMTk0NTk5OTExOnVzZXI6MjcxNTA1OTEyOnNldHRpbmdzIiwidCI6MTc3NDcxMTIyNX0=--19e1b8c80f9875a5573dc41ea6f79463e5661e8dbb878db487612036571c5754","selectedLink":null},"userMenu":{"owner":{"login":"studychannel","name":null,"avatarUrl":"https://avatars.githubusercontent.com/u/271505912?v=4"}},"headerLogo":{"href":"/","aria-label":"Homepage "},"notifications":{"indicatorMode":"none","websocketChannel":"eyJjIjoibm90aWZpY2F0aW9uLWNoYW5nZWQ6MjcxNTA1OTEyIiwidCI6MTc3NDcxMTIyNX0=--31613d49f0fdc10265c311ca897eb1455c324a546411f158db0cbfb7db8244f5","fetchIndicatorSrc":"/notifications/indicator","fetchIndicatorEnabled":true},"issues":{"href":"/issues"},"pulls":{"href":"/pulls"},"contributedRepos":{"show":true,"href":"/repos"},"copilot":{"show":true,"showAgentsButton":false,"copilotChatUrl":"/github-copilot/chat?skip_anchor=true","copilotApiUrl":"https://api.individual.githubcopilot.com"},"search":{"show":true,"showCommandPalette":false,"isSearchPage":false,"isJumpToSearch":false,"searchContext":{"scope":"repo:studychannel/2dminecraft","current_repo_name":"2dminecraft","current_repo_nwo":"studychannel/2dminecraft","user_id":"studychannel"}},"enterpriseBanner":{"show":false},"globalTransactionalMessage":null,"payloadsUrl":"/_global-navigation/payloads.json?current_repo_nwo=studychannel%2F2dminecraft\u0026repository=2dminecraft\u0026return_to=https%3A%2F%2Fgithub.com%2Fstudychannel%2F2dminecraft\u0026user_id=studychannel"}}</script>
-  <div data-target="react-partial.reactRoot"><link rel="preload" as="image" href="./2dminecraft_files/271505912"><header role="banner" aria-label="Global Navigation Menu" class="GlobalNav styles-module__appHeader__YzYWk prc-Stack-Stack-UQ9k6" data-gap="none" data-direction="vertical" data-align="stretch" data-wrap="nowrap" data-justify="start" data-padding="none"><div class="prc-Stack-Stack-UQ9k6" data-direction="horizontal" data-align="center" data-wrap="nowrap" data-justify="center" data-padding="none"><div data-testid="top-nav-left" class="styles-module__left__Fylw7 styles-module__withLocalNavigation__rjTJ_ prc-Stack-Stack-UQ9k6" data-gap="condensed" data-direction="horizontal" data-align="stretch" data-wrap="nowrap" data-justify="start" data-padding="normal"><div data-loading-wrapper="true"><button data-component="IconButton" type="button" aria-haspopup="dialog" class="prc-Button-ButtonBase-9n-Xk styles-module__appHeaderButton__axedQ prc-Button-IconButton-fyge7" data-loading="false" data-no-visuals="true" data-size="medium" data-variant="invisible" aria-labelledby="_R_apb_"><svg aria-hidden="true" focusable="false" class="octicon octicon-three-bars" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75Zm0 5A.75.75 0 0 1 1.75 7h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 7.75ZM1.75 12h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"></path></svg></button></div><span class="prc-TooltipV2-Tooltip-tLeuB" data-direction="s" aria-hidden="true" id="_R_apb_" popover="auto">Open menu</span><div class="d-none"></div><a data-component="IconButton" type="button" class="prc-Button-ButtonBase-9n-Xk styles-module__appHeaderHome__nkA_U prc-Button-IconButton-fyge7" data-loading="false" data-no-visuals="true" data-size="medium" data-variant="invisible" aria-labelledby="_R_cpb_" href="https://github.com/" data-discover="true"><svg aria-hidden="true" focusable="false" class="octicon octicon-mark-github" viewBox="0 0 24 24" width="32" height="32" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="M10.226 17.284c-2.965-.36-5.054-2.493-5.054-5.256 0-1.123.404-2.336 1.078-3.144-.292-.741-.247-2.314.09-2.965.898-.112 2.111.36 2.83 1.01.853-.269 1.752-.404 2.853-.404 1.1 0 1.999.135 2.807.382.696-.629 1.932-1.1 2.83-.988.315.606.36 2.179.067 2.942.72.854 1.101 2 1.101 3.167 0 2.763-2.089 4.852-5.098 5.234.763.494 1.28 1.572 1.28 2.807v2.336c0 .674.561 1.056 1.235.786 4.066-1.55 7.255-5.615 7.255-10.646C23.5 6.188 18.334 1 11.978 1 5.62 1 .5 6.188.5 12.545c0 4.986 3.167 9.12 7.435 10.669.606.225 1.19-.18 1.19-.786V20.63a2.9 2.9 0 0 1-1.078.224c-1.483 0-2.359-.808-2.987-2.313-.247-.607-.517-.966-1.034-1.033-.27-.023-.359-.135-.359-.27 0-.27.45-.471.898-.471.652 0 1.213.404 1.797 1.235.45.651.921.943 1.483.943.561 0 .92-.202 1.437-.719.382-.381.674-.718.944-.943"></path></svg></a><span class="prc-TooltipV2-Tooltip-tLeuB" data-direction="s" aria-hidden="true" popover="auto"><span id="_R_cpb_">Homepage <span class="prc-src-InternalVisuallyHidden-2YaI6">(<!-- -->g then d<!-- -->)</span></span><span class="prc-TooltipV2-KeybindingHintContainer-Ymj-3 prc-TooltipV2-HasTextBefore-fdOXj" aria-hidden="true"><kbd class="prc-KeybindingHint-KeybindingHint-qpYIs prc-Text-Text-9mHv3" data-testid="keybinding-hint"><span class="prc-components-Chord-DdhWN prc-components-ChordOnEmphasis-O-4BS prc-components-ChordSmall-c-P-x prc-Text-Text-9mHv3" data-kbd-chord="true"> <span class="prc-src-InternalVisuallyHidden-2YaI6">g</span><span aria-hidden="true">G</span></span><span class="prc-src-InternalVisuallyHidden-2YaI6">then</span> <span class="prc-components-Chord-DdhWN prc-components-ChordOnEmphasis-O-4BS prc-components-ChordSmall-c-P-x prc-Text-Text-9mHv3" data-kbd-chord="true"> <span class="prc-src-InternalVisuallyHidden-2YaI6">d</span><span aria-hidden="true">D</span></span></kbd></span></span><div class="d-none"></div></div><div data-testid="top-nav-center" class="styles-module__center__R3QRv styles-module__withLocalNavigation__rjTJ_ prc-Stack-Stack-UQ9k6" data-gap="condensed" data-direction="horizontal" data-align="stretch" data-wrap="nowrap" data-justify="start" data-padding="normal"><nav class="styles-module__contextRegion__VbSp2 prc-Breadcrumbs-BreadcrumbsBase-3Gb-B" aria-label="Breadcrumbs" data-overflow="menu" data-variant="normal"><ol class="prc-Breadcrumbs-BreadcrumbsList-BKjpe"><li class="prc-Breadcrumbs-ItemWrapper-k0NLn"><a class="styles-module__contextCrumb__IzGIq prc-Breadcrumbs-Item-jcraJ" href="https://github.com/studychannel" data-discover="true"><span class="">studychannel</span></a></li><li class="prc-Breadcrumbs-ItemWrapper-k0NLn"><a class="styles-module__contextCrumb__IzGIq prc-Breadcrumbs-Item-jcraJ" href="https://github.com/studychannel/2dminecraft" data-discover="true"><span class="styles-module__contextCrumbLast__tI2e3">2dminecraft</span></a></li></ol></nav><div class="Search-module__searchButtonGroup__aetw5 prc-ButtonGroup-ButtonGroup-vFUrY"><div><button type="button" aria-label="Search or jump to…" class="prc-Button-ButtonBase-9n-Xk styles-module__appHeaderButton__axedQ Search-module__searchButton__aiE0a" data-loading="false" data-size="medium" data-variant="invisible"><span data-component="buttonContent" data-align="center" class="prc-Button-ButtonContent-Iohp5"><span data-component="leadingVisual" class="prc-Button-Visual-YNt2F prc-Button-VisualWrap-E4cnq"><svg aria-hidden="true" focusable="false" class="octicon octicon-search" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"></path></svg></span><span data-component="text" class="prc-Button-Label-FWkx3"><span class="Search-module__placeholder__p9hbG Search-module__text__veSYi Search-module__value__TFoak">Type <kbd class="Search-module__kbd__WCskr">/</kbd> to search</span></span></span></button></div><div></div></div><button data-component="IconButton" type="button" class="prc-Button-ButtonBase-9n-Xk styles-module__appHeaderButton__axedQ Search-module__smallSearchButton___8Gvn prc-Button-IconButton-fyge7" data-loading="false" data-no-visuals="true" data-size="medium" data-variant="invisible" aria-labelledby="_R_2l9b_"><svg aria-hidden="true" focusable="false" class="octicon octicon-search" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"></path></svg></button><span class="prc-TooltipV2-Tooltip-tLeuB" data-direction="s" aria-hidden="true" popover="auto"><span id="_R_2l9b_">Search or jump to…<span class="prc-src-InternalVisuallyHidden-2YaI6">(<!-- -->forward slash<!-- -->)</span></span><span class="prc-TooltipV2-KeybindingHintContainer-Ymj-3 prc-TooltipV2-HasTextBefore-fdOXj" aria-hidden="true"><kbd class="prc-KeybindingHint-KeybindingHint-qpYIs prc-Text-Text-9mHv3" data-testid="keybinding-hint"><span class="prc-components-Chord-DdhWN prc-components-ChordOnEmphasis-O-4BS prc-components-ChordSmall-c-P-x prc-Text-Text-9mHv3" data-kbd-chord="true"> <span class="prc-src-InternalVisuallyHidden-2YaI6">forward slash</span><span aria-hidden="true">/</span></span></kbd></span></span><div class="d-none"></div><div class="d-none"><qbsearch-input class="search-input" data-scope="repo:studychannel/2dminecraft" data-custom-scopes-path="/search/custom_scopes" data-delete-custom-scopes-csrf="bA5bJVgP-vmUthiUgtWeX_V3IggZ1gbwyl2_cyuVAML9puHxxj4CsylHWZeHJ3zIgEHlBhJYUOH1ZbzTgmKnIw" data-max-custom-scopes="10" data-header-redesign-enabled="true" data-initial-value="" data-blackbird-suggestions-path="/search/suggestions" data-jump-to-suggestions-path="/_graphql/GetSuggestedNavigationDestinations" data-current-repository="studychannel/2dminecraft" data-current-org="" data-current-owner="studychannel" data-logged-in="true" data-copilot-chat-enabled="false" data-nl-search-enabled="false" data-catalyst="">
-  <div class="search-input-container search-with-dialog position-relative d-flex flex-row flex-items-center height-auto color-bg-transparent border-0 color-fg-subtle mx-0" data-action="click:qbsearch-input#searchInputContainerClicked">
-
-    <input type="hidden" name="type" class="js-site-search-type-field">
-
-    
-<div class="Overlay--hidden " data-modal-dialog-overlay="">
-  <modal-dialog data-action="close:qbsearch-input#handleClose cancel:qbsearch-input#handleClose" data-target="qbsearch-input.searchSuggestionsDialog" role="dialog" id="search-suggestions-dialog" aria-modal="true" aria-labelledby="search-suggestions-dialog-header" data-view-component="true" class="Overlay Overlay--width-medium Overlay--height-auto">
-      <h1 id="search-suggestions-dialog-header" class="sr-only">Search code, repositories, users, issues, pull requests...</h1>
-    <div class="Overlay-body Overlay-body--paddingNone">
-      
-          <div data-view-component="true">        <div class="search-suggestions position-absolute width-full color-shadow-large border color-fg-default color-bg-default overflow-hidden d-flex flex-column query-builder-container" style="border-radius: 12px;" data-target="qbsearch-input.queryBuilderContainer" hidden="">
-          <!-- '"` --><!-- </textarea></xmp> --><form id="query-builder-test-form" action="https://github.com/studychannel/2dminecraft/upload" accept-charset="UTF-8" method="get">
-  <query-builder data-target="qbsearch-input.queryBuilder" id="query-builder-query-builder-test" data-filter-key=":" data-view-component="true" class="QueryBuilder search-query-builder" data-min-width="300" data-catalyst="">
-    <div class="FormControl FormControl--fullWidth">
-      <label id="query-builder-test-label" for="query-builder-test" class="FormControl-label sr-only">
-        Search
-      </label>
-      <div class="QueryBuilder-StyledInput width-fit " data-target="query-builder.styledInput">
-          <span id="query-builder-test-leadingvisual-wrap" class="FormControl-input-leadingVisualWrap QueryBuilder-leadingVisualWrap">
-            <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-search FormControl-input-leadingVisual">
-    <path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"></path>
-</svg>
-          </span>
-        <div data-target="query-builder.styledInputContainer" class="QueryBuilder-StyledInputContainer">
-          <div aria-hidden="true" class="QueryBuilder-StyledInputContent" data-target="query-builder.styledInputContent"></div>
-          <div class="QueryBuilder-InputWrapper">
-            <div aria-hidden="true" class="QueryBuilder-Sizer" data-target="query-builder.sizer"><span></span></div>
-            <input id="query-builder-test" name="query-builder-test" value="" autocomplete="off" type="text" role="combobox" spellcheck="false" aria-expanded="false" aria-describedby="validation-0a10dea7-1b65-4474-9de3-cd7d4259cea5" data-target="query-builder.input" data-action="
-          input:query-builder#inputChange
-          blur:query-builder#inputBlur
-          keydown:query-builder#inputKeydown
-          focus:query-builder#inputFocus
-        " data-view-component="true" class="FormControl-input QueryBuilder-Input FormControl-medium" aria-controls="query-builder-test-results" aria-autocomplete="list" aria-haspopup="listbox" style="width: 300px;">
-          </div>
-        </div>
-          <span data-target="query-builder.clearButton" hidden="">
-            <span class="sr-only" id="query-builder-test-clear">Clear</span>
-            <button role="button" id="query-builder-test-clear-button" aria-labelledby="query-builder-test-clear query-builder-test-label" data-action="
-                  click:query-builder#clear
-                  focus:query-builder#clearButtonFocus
-                  blur:query-builder#clearButtonBlur
-                " variant="small" type="button" data-view-component="true" class="Button Button--iconOnly Button--invisible Button--medium mr-1 px-2 py-0 d-flex flex-items-center rounded-1 color-fg-muted">  <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x-circle-fill Button-visual">
-    <path d="M2.343 13.657A8 8 0 1 1 13.658 2.343 8 8 0 0 1 2.343 13.657ZM6.03 4.97a.751.751 0 0 0-1.042.018.751.751 0 0 0-.018 1.042L6.94 8 4.97 9.97a.749.749 0 0 0 .326 1.275.749.749 0 0 0 .734-.215L8 9.06l1.97 1.97a.749.749 0 0 0 1.275-.326.749.749 0 0 0-.215-.734L9.06 8l1.97-1.97a.749.749 0 0 0-.326-1.275.749.749 0 0 0-.734.215L8 6.94Z"></path>
-</svg>
-</button>
-
-          </span>
-      </div>
-      <template id="search-icon"></template>
-
-<template id="code-icon"></template>
-
-<template id="file-code-icon"></template>
-
-<template id="history-icon"></template>
-
-<template id="repo-icon"></template>
-
-<template id="bookmark-icon"></template>
-
-<template id="plus-circle-icon"></template>
-
-<template id="circle-icon"></template>
-
-<template id="trash-icon"></template>
-
-<template id="team-icon"></template>
-
-<template id="project-icon"></template>
-
-<template id="pencil-icon"></template>
-
-<template id="copilot-icon"></template>
-
-<template id="copilot-error-icon"></template>
-
-<template id="workflow-icon"></template>
-
-<template id="book-icon"></template>
-
-<template id="code-review-icon"></template>
-
-<template id="codespaces-icon"></template>
-
-<template id="comment-icon"></template>
-
-<template id="comment-discussion-icon"></template>
-
-<template id="organization-icon"></template>
-
-<template id="rocket-icon"></template>
-
-<template id="shield-check-icon"></template>
-
-<template id="heart-icon"></template>
-
-<template id="server-icon"></template>
-
-<template id="globe-icon"></template>
-
-<template id="issue-opened-icon"></template>
-
-<template id="device-mobile-icon"></template>
-
-<template id="package-icon"></template>
-
-<template id="credit-card-icon"></template>
-
-<template id="play-icon"></template>
-
-<template id="gift-icon"></template>
-
-<template id="code-square-icon"></template>
-
-<template id="device-desktop-icon"></template>
-
-        <div class="position-relative">
-                        <ul role="listbox" class="ActionListWrap QueryBuilder-ListWrap" aria-label="Suggestions" data-action="
-                combobox-commit:query-builder#comboboxCommit
-                mousedown:query-builder#resultsMousedown
-              " data-target="query-builder.resultsList" data-persist-list="false" id="query-builder-test-results" tabindex="-1"></ul>
-
-        </div>
-      <div class="FormControl-inlineValidation" id="validation-0a10dea7-1b65-4474-9de3-cd7d4259cea5" hidden="hidden">
-        <span class="FormControl-inlineValidation--visual">
-          <svg aria-hidden="true" height="12" viewBox="0 0 12 12" version="1.1" width="12" data-view-component="true" class="octicon octicon-alert-fill">
-    <path d="M4.855.708c.5-.896 1.79-.896 2.29 0l4.675 8.351a1.312 1.312 0 0 1-1.146 1.954H1.33A1.313 1.313 0 0 1 .183 9.058ZM7 7V3H5v4Zm-1 3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"></path>
-</svg>
-        </span>
-        <span></span>
-</div>    </div>
-    <div data-target="query-builder.screenReaderFeedback" aria-live="polite" aria-atomic="true" class="sr-only">0 suggestions.</div>
-</query-builder></form>
-          <div class="d-flex flex-row color-fg-muted tmp-px-3 text-small color-bg-default search-feedback-prompt">
-            <a target="_blank" href="https://docs.github.com/search-github/github-code-search/understanding-github-code-search-syntax" data-view-component="true" class="Link color-fg-accent text-normal ml-2">Search syntax tips</a>            <div class="d-flex flex-1"></div>
-              <button data-action="click:qbsearch-input#showFeedbackDialog" type="button" data-view-component="true" class="Button--link Button--medium Button color-fg-accent text-normal ml-2">  <span class="Button-content">
-    <span class="Button-label">Give feedback</span>
-  </span>
-</button>
-          </div>
-        </div>
-</div>
-
-    </div>
-</modal-dialog></div>
-  </div>
-  <div data-action="click:qbsearch-input#retract" class="dark-backdrop position-fixed" hidden="" data-target="qbsearch-input.darkBackdrop"></div>
-  <div class="color-fg-default">
-    
-<dialog-helper>
-  <dialog data-target="qbsearch-input.feedbackDialog" data-action="close:qbsearch-input#handleDialogClose cancel:qbsearch-input#handleDialogClose" id="feedback-dialog" aria-modal="true" aria-labelledby="feedback-dialog-title" aria-describedby="feedback-dialog-description" data-view-component="true" class="Overlay Overlay-whenNarrow Overlay--size-medium Overlay--motion-scaleFade Overlay--disableScroll">
-    <div data-view-component="true" class="Overlay-header">
-  <div class="Overlay-headerContentWrap">
-    <div class="Overlay-titleWrap">
-      <h1 class="Overlay-title " id="feedback-dialog-title">
-        Provide feedback
-      </h1>
-        
-    </div>
-    <div class="Overlay-actionWrap">
-      <button data-close-dialog-id="feedback-dialog" aria-label="Close" type="button" data-view-component="true" class="close-button Overlay-closeButton"><svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x">
-    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
-</svg></button>
-    </div>
-  </div>
-  
-</div>
-      <scrollable-region data-labelled-by="feedback-dialog-title" data-catalyst="" style="overflow: auto;">
-        <div data-view-component="true" class="Overlay-body">        <!-- '"` --><!-- </textarea></xmp> --><form id="code-search-feedback-form" data-turbo="false" action="https://github.com/search/feedback" accept-charset="UTF-8" method="post"><input type="hidden" name="authenticity_token" value="vEMwL3w8UX3FNotCt5V8AYSv7i7pRSzqRpiVKNqt1ujU-Fi-vJ-lUf9tOvZ3CjUFBInKTEdaqX5DsaMaBOmHxA">
-          <p>We read every piece of feedback, and take your input very seriously.</p>
-          <textarea name="feedback" class="form-control width-full mb-2" style="height: 120px" id="feedback"></textarea>
-          <input name="include_email" id="include_email" aria-label="Include my email address so I can be contacted" class="form-control mr-2" type="checkbox">
-          <label for="include_email" style="font-weight: normal">Include my email address so I can be contacted</label>
-</form></div>
-      </scrollable-region>
-      <div data-view-component="true" class="Overlay-footer Overlay-footer--alignEnd">          <button data-close-dialog-id="feedback-dialog" type="button" data-view-component="true" class="btn">    Cancel
-</button>
-          <button form="code-search-feedback-form" data-action="click:qbsearch-input#submitFeedback" type="submit" data-view-component="true" class="btn-primary btn">    Submit feedback
-</button>
-</div>
-</dialog></dialog-helper>
-
-    <custom-scopes data-target="qbsearch-input.customScopesManager" data-catalyst="">
-    
-<dialog-helper>
-  <dialog data-target="custom-scopes.customScopesModalDialog" data-action="close:qbsearch-input#handleDialogClose cancel:qbsearch-input#handleDialogClose" id="custom-scopes-dialog" aria-modal="true" aria-labelledby="custom-scopes-dialog-title" aria-describedby="custom-scopes-dialog-description" data-view-component="true" class="Overlay Overlay-whenNarrow Overlay--size-medium Overlay--motion-scaleFade Overlay--disableScroll">
-    <div data-view-component="true" class="Overlay-header Overlay-header--divided">
-  <div class="Overlay-headerContentWrap">
-    <div class="Overlay-titleWrap">
-      <h1 class="Overlay-title " id="custom-scopes-dialog-title">
-        Saved searches
-      </h1>
-        <h2 id="custom-scopes-dialog-description" class="Overlay-description">Use saved searches to filter your results more quickly</h2>
-    </div>
-    <div class="Overlay-actionWrap">
-      <button data-close-dialog-id="custom-scopes-dialog" aria-label="Close" type="button" data-view-component="true" class="close-button Overlay-closeButton"><svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x">
-    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
-</svg></button>
-    </div>
-  </div>
-  
-</div>
-      <scrollable-region data-labelled-by="custom-scopes-dialog-title" data-catalyst="" style="overflow: auto;">
-        <div data-view-component="true" class="Overlay-body">        <div data-target="custom-scopes.customScopesModalDialogFlash"></div>
-
-        <div hidden="" class="create-custom-scope-form" data-target="custom-scopes.createCustomScopeForm">
-        <!-- '"` --><!-- </textarea></xmp> --><form id="custom-scopes-dialog-form" data-turbo="false" action="https://github.com/search/custom_scopes" accept-charset="UTF-8" method="post"><input type="hidden" name="authenticity_token" value="NyDVE1YQPfltsVI2uLZ2DSMuPfKqnNHj5UMJQNELcdZJrLWP6wjCUgK85Y42VOaA_Jb2y8EM8sTEOgjKZXGabg">
-          <div data-target="custom-scopes.customScopesModalDialogFlash"></div>
-
-          <input type="hidden" id="custom_scope_id" name="custom_scope_id" data-target="custom-scopes.customScopesIdField">
-
-          <div class="form-group">
-            <label for="custom_scope_name">Name</label>
-            <auto-check src="/search/custom_scopes/check_name" required="">
-              <input type="text" name="custom_scope_name" id="custom_scope_name" data-target="custom-scopes.customScopesNameField" class="form-control" autocomplete="off" placeholder="github-ruby" required="" maxlength="50" spellcheck="false">
-              <input type="hidden" value="rgdFJclngy4SUEzeTAUJWa6sULf9_A3FUOY8BEWAvEivmnWOFym5IqzSTvlozTRqgH4TjRs2e2Ot_oUxGLTJRg" data-csrf="true">
-            </auto-check>
-          </div>
-
-          <div class="form-group">
-            <label for="custom_scope_query">Query</label>
-            <input type="text" name="custom_scope_query" id="custom_scope_query" data-target="custom-scopes.customScopesQueryField" class="form-control" autocomplete="off" placeholder="(repo:mona/a OR repo:mona/b) AND lang:python" required="" maxlength="500">
-          </div>
-
-          <p class="text-small color-fg-muted">
-            To see all available qualifiers, see our <a class="Link--inTextBlock" href="https://docs.github.com/search-github/github-code-search/understanding-github-code-search-syntax">documentation</a>.
-          </p>
-</form>        </div>
-
-        <div data-target="custom-scopes.manageCustomScopesForm">
-          <div data-target="custom-scopes.list"></div>
-        </div>
-
-</div>
-      </scrollable-region>
-      <div data-view-component="true" class="Overlay-footer Overlay-footer--alignEnd Overlay-footer--divided">          <button data-action="click:custom-scopes#customScopesCancel" type="button" data-view-component="true" class="btn">    Cancel
-</button>
-          <button form="custom-scopes-dialog-form" data-action="click:custom-scopes#customScopesSubmit" data-target="custom-scopes.customScopesSubmitButton" type="submit" data-view-component="true" class="btn-primary btn">    Create saved search
-</button>
-</div>
-</dialog></dialog-helper>
-    </custom-scopes>
-  </div>
-</qbsearch-input><input type="hidden" value="8lpIPwzmimMYHSglZo0efU_g3c5XBZ6QlxvSKGOHzb524RfuZH0JwqK-x8suKxpIwWPiLaCFrqbfCxCGyjp69w" data-csrf="true" class="js-data-jump-to-suggestions-path-csrf"></div></div><div data-testid="top-nav-right" class="styles-module__right__mlBQg styles-module__withLocalNavigation__rjTJ_ prc-Stack-Stack-UQ9k6" data-gap="condensed" data-direction="horizontal" data-align="center" data-wrap="nowrap" data-justify="start" data-padding="normal"><div data-testid="top-bar-actions" class="hide-sm hide-md prc-Stack-Stack-UQ9k6" data-gap="condensed" data-direction="horizontal" data-align="center" data-wrap="nowrap" data-justify="start" data-padding="none"><span><div class="prc-ButtonGroup-ButtonGroup-vFUrY"><div><a data-component="IconButton" type="button" class="prc-Button-ButtonBase-9n-Xk styles-module__appHeaderButton__axedQ prc-Button-IconButton-fyge7" data-loading="false" data-no-visuals="true" data-size="medium" data-variant="invisible" aria-labelledby="_R_2kjpb_" href="https://github.com/copilot" data-discover="true"><svg aria-hidden="true" focusable="false" class="octicon octicon-copilot" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="M7.998 15.035c-4.562 0-7.873-2.914-7.998-3.749V9.338c.085-.628.677-1.686 1.588-2.065.013-.07.024-.143.036-.218.029-.183.06-.384.126-.612-.201-.508-.254-1.084-.254-1.656 0-.87.128-1.769.693-2.484.579-.733 1.494-1.124 2.724-1.261 1.206-.134 2.262.034 2.944.765.05.053.096.108.139.165.044-.057.094-.112.143-.165.682-.731 1.738-.899 2.944-.765 1.23.137 2.145.528 2.724 1.261.566.715.693 1.614.693 2.484 0 .572-.053 1.148-.254 1.656.066.228.098.429.126.612.012.076.024.148.037.218.924.385 1.522 1.471 1.591 2.095v1.872c0 .766-3.351 3.795-8.002 3.795Zm0-1.485c2.28 0 4.584-1.11 5.002-1.433V7.862l-.023-.116c-.49.21-1.075.291-1.727.291-1.146 0-2.059-.327-2.71-.991A3.222 3.222 0 0 1 8 6.303a3.24 3.24 0 0 1-.544.743c-.65.664-1.563.991-2.71.991-.652 0-1.236-.081-1.727-.291l-.023.116v4.255c.419.323 2.722 1.433 5.002 1.433ZM6.762 2.83c-.193-.206-.637-.413-1.682-.297-1.019.113-1.479.404-1.713.7-.247.312-.369.789-.369 1.554 0 .793.129 1.171.308 1.371.162.181.519.379 1.442.379.853 0 1.339-.235 1.638-.54.315-.322.527-.827.617-1.553.117-.935-.037-1.395-.241-1.614Zm4.155-.297c-1.044-.116-1.488.091-1.681.297-.204.219-.359.679-.242 1.614.091.726.303 1.231.618 1.553.299.305.784.54 1.638.54.922 0 1.28-.198 1.442-.379.179-.2.308-.578.308-1.371 0-.765-.123-1.242-.37-1.554-.233-.296-.693-.587-1.713-.7Z"></path><path d="M6.25 9.037a.75.75 0 0 1 .75.75v1.501a.75.75 0 0 1-1.5 0V9.787a.75.75 0 0 1 .75-.75Zm4.25.75v1.501a.75.75 0 0 1-1.5 0V9.787a.75.75 0 0 1 1.5 0Z"></path></svg></a><span class="prc-TooltipV2-Tooltip-tLeuB" data-direction="s" aria-hidden="true" id="_R_2kjpb_" popover="auto">Chat with Copilot</span></div><div><div class="d-none"></div><button type="button" aria-label="Open Copilot…" aria-haspopup="true" aria-expanded="false" tabindex="0" class="prc-Button-ButtonBase-9n-Xk styles-module__appHeaderButton__axedQ CopilotItems-module__CopilotMenu__DVdfE" data-loading="false" data-size="medium" data-variant="invisible" id="_R_54jpb_"><span data-component="buttonContent" data-align="center" class="prc-Button-ButtonContent-Iohp5"><span data-component="leadingVisual" class="prc-Button-Visual-YNt2F prc-Button-VisualWrap-E4cnq"><svg aria-hidden="true" focusable="false" class="octicon octicon-copilot" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="M7.998 15.035c-4.562 0-7.873-2.914-7.998-3.749V9.338c.085-.628.677-1.686 1.588-2.065.013-.07.024-.143.036-.218.029-.183.06-.384.126-.612-.201-.508-.254-1.084-.254-1.656 0-.87.128-1.769.693-2.484.579-.733 1.494-1.124 2.724-1.261 1.206-.134 2.262.034 2.944.765.05.053.096.108.139.165.044-.057.094-.112.143-.165.682-.731 1.738-.899 2.944-.765 1.23.137 2.145.528 2.724 1.261.566.715.693 1.614.693 2.484 0 .572-.053 1.148-.254 1.656.066.228.098.429.126.612.012.076.024.148.037.218.924.385 1.522 1.471 1.591 2.095v1.872c0 .766-3.351 3.795-8.002 3.795Zm0-1.485c2.28 0 4.584-1.11 5.002-1.433V7.862l-.023-.116c-.49.21-1.075.291-1.727.291-1.146 0-2.059-.327-2.71-.991A3.222 3.222 0 0 1 8 6.303a3.24 3.24 0 0 1-.544.743c-.65.664-1.563.991-2.71.991-.652 0-1.236-.081-1.727-.291l-.023.116v4.255c.419.323 2.722 1.433 5.002 1.433ZM6.762 2.83c-.193-.206-.637-.413-1.682-.297-1.019.113-1.479.404-1.713.7-.247.312-.369.789-.369 1.554 0 .793.129 1.171.308 1.371.162.181.519.379 1.442.379.853 0 1.339-.235 1.638-.54.315-.322.527-.827.617-1.553.117-.935-.037-1.395-.241-1.614Zm4.155-.297c-1.044-.116-1.488.091-1.681.297-.204.219-.359.679-.242 1.614.091.726.303 1.231.618 1.553.299.305.784.54 1.638.54.922 0 1.28-.198 1.442-.379.179-.2.308-.578.308-1.371 0-.765-.123-1.242-.37-1.554-.233-.296-.693-.587-1.713-.7Z"></path><path d="M6.25 9.037a.75.75 0 0 1 .75.75v1.501a.75.75 0 0 1-1.5 0V9.787a.75.75 0 0 1 .75-.75Zm4.25.75v1.501a.75.75 0 0 1-1.5 0V9.787a.75.75 0 0 1 1.5 0Z"></path></svg></span></span><span data-component="trailingAction" class="prc-Button-Visual-YNt2F prc-Button-VisualWrap-E4cnq"><svg aria-hidden="true" focusable="false" class="octicon octicon-triangle-down" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="m4.427 7.427 3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 0 11.396 7H4.604a.25.25 0 0 0-.177.427Z"></path></svg></span></button></div></div></span><div class="styles-module__itemDivider__nunbs"></div><button type="button" aria-haspopup="true" aria-expanded="false" tabindex="0" class="prc-Button-ButtonBase-9n-Xk GlobalCreateMenu-module__actionMenuButton__Hj_iB" data-loading="false" data-size="medium" data-variant="invisible" aria-labelledby="global-create-menu-tooltip-_R_1jpb_" id="_R_5jpb_"><span data-component="buttonContent" data-align="center" class="prc-Button-ButtonContent-Iohp5"><span data-component="leadingVisual" class="prc-Button-Visual-YNt2F prc-Button-VisualWrap-E4cnq"><svg aria-hidden="true" focusable="false" class="octicon octicon-plus" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="M7.75 2a.75.75 0 0 1 .75.75V7h4.25a.75.75 0 0 1 0 1.5H8.5v4.25a.75.75 0 0 1-1.5 0V8.5H2.75a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z"></path></svg></span></span><span data-component="trailingAction" class="prc-Button-Visual-YNt2F prc-Button-VisualWrap-E4cnq"><svg aria-hidden="true" focusable="false" class="octicon octicon-triangle-down" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="m4.427 7.427 3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 0 11.396 7H4.604a.25.25 0 0 0-.177.427Z"></path></svg></span></button><span class="prc-TooltipV2-Tooltip-tLeuB" data-direction="s" aria-hidden="true" id="global-create-menu-tooltip-_R_1jpb_" popover="auto">Create new...</span><a data-component="IconButton" type="button" class="prc-Button-ButtonBase-9n-Xk styles-module__appHeaderButton__axedQ prc-Button-IconButton-fyge7" data-loading="false" data-no-visuals="true" data-size="medium" data-variant="invisible" aria-labelledby="_R_m3pb_" href="https://github.com/issues" data-discover="true"><svg aria-hidden="true" focusable="false" class="octicon octicon-issue-opened" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"></path><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"></path></svg></a><span class="prc-TooltipV2-Tooltip-tLeuB" data-direction="s" aria-hidden="true" id="_R_m3pb_" popover="auto">Issues</span><a data-component="IconButton" type="button" class="prc-Button-ButtonBase-9n-Xk styles-module__appHeaderButton__axedQ prc-Button-IconButton-fyge7" data-loading="false" data-no-visuals="true" data-size="medium" data-variant="invisible" aria-labelledby="_R_q3pb_" href="https://github.com/pulls" data-discover="true"><svg aria-hidden="true" focusable="false" class="octicon octicon-git-pull-request" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"></path></svg></a><span class="prc-TooltipV2-Tooltip-tLeuB" data-direction="s" aria-hidden="true" id="_R_q3pb_" popover="auto">Pull requests</span><a data-component="IconButton" type="button" class="prc-Button-ButtonBase-9n-Xk styles-module__appHeaderButton__axedQ prc-Button-IconButton-fyge7" data-loading="false" data-no-visuals="true" data-size="medium" data-variant="invisible" aria-labelledby="_R_u3pb_" href="https://github.com/repos" data-discover="true"><svg aria-hidden="true" focusable="false" class="octicon octicon-repo" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8ZM5 12.25a.25.25 0 0 1 .25-.25h3.5a.25.25 0 0 1 .25.25v3.25a.25.25 0 0 1-.4.2l-1.45-1.087a.249.249 0 0 0-.3 0L5.4 15.7a.25.25 0 0 1-.4-.2Z"></path></svg></a><span class="prc-TooltipV2-Tooltip-tLeuB" data-direction="s" aria-hidden="true" id="_R_u3pb_" popover="auto">Repositories</span><div class="d-none"></div></div><a data-component="IconButton" type="button" class="prc-Button-ButtonBase-9n-Xk styles-module__appHeaderButton__axedQ prc-Button-IconButton-fyge7" data-loading="false" data-no-visuals="true" data-size="medium" data-variant="invisible" aria-labelledby="_R_lpb_" href="https://github.com/notifications" data-discover="true"><svg aria-hidden="true" focusable="false" class="octicon octicon-inbox" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="M2.8 2.06A1.75 1.75 0 0 1 4.41 1h7.18c.7 0 1.333.417 1.61 1.06l2.74 6.395c.04.093.06.194.06.295v4.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25v-4.5c0-.101.02-.202.06-.295Zm1.61.44a.25.25 0 0 0-.23.152L1.887 8H4.75a.75.75 0 0 1 .6.3L6.625 10h2.75l1.275-1.7a.75.75 0 0 1 .6-.3h2.863L11.82 2.652a.25.25 0 0 0-.23-.152Zm10.09 7h-2.875l-1.275 1.7a.75.75 0 0 1-.6.3h-3.5a.75.75 0 0 1-.6-.3L4.375 9.5H1.5v3.75c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25Z"></path></svg></a><span class="prc-TooltipV2-Tooltip-tLeuB" data-direction="s" aria-hidden="true" popover="auto"><span id="_R_lpb_">You have no unread notifications<span class="prc-src-InternalVisuallyHidden-2YaI6">(<!-- -->g then n<!-- -->)</span></span><span class="prc-TooltipV2-KeybindingHintContainer-Ymj-3 prc-TooltipV2-HasTextBefore-fdOXj" aria-hidden="true"><kbd class="prc-KeybindingHint-KeybindingHint-qpYIs prc-Text-Text-9mHv3" data-testid="keybinding-hint"><span class="prc-components-Chord-DdhWN prc-components-ChordOnEmphasis-O-4BS prc-components-ChordSmall-c-P-x prc-Text-Text-9mHv3" data-kbd-chord="true"> <span class="prc-src-InternalVisuallyHidden-2YaI6">g</span><span aria-hidden="true">G</span></span><span class="prc-src-InternalVisuallyHidden-2YaI6">then</span> <span class="prc-components-Chord-DdhWN prc-components-ChordOnEmphasis-O-4BS prc-components-ChordSmall-c-P-x prc-Text-Text-9mHv3" data-kbd-chord="true"> <span class="prc-src-InternalVisuallyHidden-2YaI6">n</span><span aria-hidden="true">N</span></span></kbd></span></span><div class="d-none"></div><div class="GlobalNavUserMenu-module__container__NaVIt"><button data-component="IconButton" type="button" aria-haspopup="menu" data-login="studychannel" class="prc-Button-ButtonBase-9n-Xk GlobalNavUserMenu-module__anchor__Dcej6 prc-Button-IconButton-fyge7" data-loading="false" data-no-visuals="true" data-size="medium" data-variant="invisible" aria-labelledby="_R_2npb_"><img data-component="Avatar" class="prc-Avatar-Avatar-0xaUi" alt="User avatar" width="32" height="32" style="--avatarSize-regular:32px" src="./2dminecraft_files/271505912" data-testid="github-avatar"></button><span class="prc-TooltipV2-Tooltip-tLeuB" data-direction="s" aria-hidden="true" id="_R_2npb_" popover="auto">Open user navigation menu</span></div></div></div><h2 class="prc-src-InternalVisuallyHidden-2YaI6">Repository navigation</h2><nav class="prc-components-UnderlineWrapper-eT-Yj LocalNavigation-module__LocalNavigation__b0Xc0" aria-label="Repository" data-variant="inset" data-overflow-measured="true"><ul class="prc-components-UnderlineItemList-xKlKC" role="list"><li class="prc-UnderlineNav-UnderlineNavItem-syRjR"><a href="https://github.com/studychannel/2dminecraft" aria-current="page" data-tab-item="code" data-react-nav="code-view" data-react-nav-anchor="code-view-repo-link" data-turbo-frame="repo-content-turbo-frame" class="prc-components-UnderlineItem-7fP-n" data-discover="true"><span data-component="text" data-content="Code">Code</span></a></li><li class="prc-UnderlineNav-UnderlineNavItem-syRjR"><a href="https://github.com/studychannel/2dminecraft/issues" data-tab-item="issues" data-react-nav="issues-react" data-turbo-frame="repo-content-turbo-frame" class="prc-components-UnderlineItem-7fP-n" data-discover="true"><span data-component="text" data-content="Issues">Issues</span></a></li><li class="prc-UnderlineNav-UnderlineNavItem-syRjR"><a href="https://github.com/studychannel/2dminecraft/pulls" data-tab-item="pull-requests" data-turbo-frame="repo-content-turbo-frame" class="prc-components-UnderlineItem-7fP-n" data-discover="true"><span data-component="text" data-content="Pull requests">Pull requests</span></a></li><li class="prc-UnderlineNav-UnderlineNavItem-syRjR"><a href="https://github.com/studychannel/2dminecraft/actions" data-tab-item="actions" data-turbo-frame="repo-content-turbo-frame" class="prc-components-UnderlineItem-7fP-n" data-discover="true"><span data-component="text" data-content="Actions">Actions</span></a></li><li class="prc-UnderlineNav-UnderlineNavItem-syRjR"><a href="https://github.com/studychannel/2dminecraft/projects" data-tab-item="projects" data-turbo-frame="repo-content-turbo-frame" class="prc-components-UnderlineItem-7fP-n" data-discover="true"><span data-component="text" data-content="Projects">Projects</span></a></li><li class="prc-UnderlineNav-UnderlineNavItem-syRjR"><a href="https://github.com/studychannel/2dminecraft/wiki" data-tab-item="wiki" data-turbo-frame="repo-content-turbo-frame" class="prc-components-UnderlineItem-7fP-n" data-discover="true"><span data-component="text" data-content="Wiki">Wiki</span></a></li><li class="prc-UnderlineNav-UnderlineNavItem-syRjR"><a href="https://github.com/studychannel/2dminecraft/security" data-tab-item="security" data-turbo-frame="repo-content-turbo-frame" class="prc-components-UnderlineItem-7fP-n" data-discover="true"><span data-component="text" data-content="Security">Security</span></a></li><li class="prc-UnderlineNav-UnderlineNavItem-syRjR"><a href="https://github.com/studychannel/2dminecraft/pulse" data-tab-item="insights" data-turbo-frame="repo-content-turbo-frame" class="prc-components-UnderlineItem-7fP-n" data-discover="true"><span data-component="text" data-content="Insights">Insights</span></a></li><li class="prc-UnderlineNav-UnderlineNavItem-syRjR"><a href="https://github.com/studychannel/2dminecraft/settings" data-tab-item="settings" data-turbo-frame="repo-content-turbo-frame" class="prc-components-UnderlineItem-7fP-n" data-discover="true"><span data-component="text" data-content="Settings">Settings</span></a></li></ul></nav><div class="d-none"></div></header><script type="application/json" id="__PRIMER_DATA__R_0___">{"resolvedServerColorMode":"night"}</script></div>
-</react-partial>
-
-
-      <div class="js-global-bar" style="display: none;">
-        
-
-
-<qbsearch-input class="search-input" data-scope="repo:studychannel/2dminecraft" data-custom-scopes-path="/search/custom_scopes" data-delete-custom-scopes-csrf="bA5bJVgP-vmUthiUgtWeX_V3IggZ1gbwyl2_cyuVAML9puHxxj4CsylHWZeHJ3zIgEHlBhJYUOH1ZbzTgmKnIw" data-max-custom-scopes="10" data-header-redesign-enabled="true" data-initial-value="" data-blackbird-suggestions-path="/search/suggestions" data-jump-to-suggestions-path="/_graphql/GetSuggestedNavigationDestinations" data-current-repository="studychannel/2dminecraft" data-current-org="" data-current-owner="studychannel" data-logged-in="true" data-copilot-chat-enabled="false" data-nl-search-enabled="false" data-catalyst="">
-  <div class="search-input-container search-with-dialog position-relative d-flex flex-row flex-items-center height-auto color-bg-transparent border-0 color-fg-subtle mx-0" data-action="click:qbsearch-input#searchInputContainerClicked">
-
-    <input type="hidden" name="type" class="js-site-search-type-field">
-
-    
-<div class="Overlay--hidden " data-modal-dialog-overlay="">
-  <modal-dialog data-action="close:qbsearch-input#handleClose cancel:qbsearch-input#handleClose" data-target="qbsearch-input.searchSuggestionsDialog" role="dialog" id="search-suggestions-dialog" aria-modal="true" aria-labelledby="search-suggestions-dialog-header" data-view-component="true" class="Overlay Overlay--width-medium Overlay--height-auto">
-      <h1 id="search-suggestions-dialog-header" class="sr-only">Search code, repositories, users, issues, pull requests...</h1>
-    <div class="Overlay-body Overlay-body--paddingNone">
-      
-          <div data-view-component="true">        <div class="search-suggestions position-absolute width-full color-shadow-large border color-fg-default color-bg-default overflow-hidden d-flex flex-column query-builder-container" style="border-radius: 12px;" data-target="qbsearch-input.queryBuilderContainer" hidden="">
-          <!-- '"` --><!-- </textarea></xmp> --><form id="query-builder-test-form" action="https://github.com/studychannel/2dminecraft/upload" accept-charset="UTF-8" method="get">
-  <query-builder data-target="qbsearch-input.queryBuilder" id="query-builder-query-builder-test" data-filter-key=":" data-view-component="true" class="QueryBuilder search-query-builder" data-min-width="300" data-catalyst="">
-    <div class="FormControl FormControl--fullWidth">
-      <label id="query-builder-test-label" for="query-builder-test" class="FormControl-label sr-only">
-        Search
-      </label>
-      <div class="QueryBuilder-StyledInput width-fit " data-target="query-builder.styledInput">
-          <span id="query-builder-test-leadingvisual-wrap" class="FormControl-input-leadingVisualWrap QueryBuilder-leadingVisualWrap">
-            <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-search FormControl-input-leadingVisual">
-    <path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"></path>
-</svg>
-          </span>
-        <div data-target="query-builder.styledInputContainer" class="QueryBuilder-StyledInputContainer">
-          <div aria-hidden="true" class="QueryBuilder-StyledInputContent" data-target="query-builder.styledInputContent"></div>
-          <div class="QueryBuilder-InputWrapper">
-            <div aria-hidden="true" class="QueryBuilder-Sizer" data-target="query-builder.sizer"><span></span></div>
-            <input id="query-builder-test" name="query-builder-test" value="" autocomplete="off" type="text" role="combobox" spellcheck="false" aria-expanded="false" aria-describedby="validation-0a10dea7-1b65-4474-9de3-cd7d4259cea5" data-target="query-builder.input" data-action="
-          input:query-builder#inputChange
-          blur:query-builder#inputBlur
-          keydown:query-builder#inputKeydown
-          focus:query-builder#inputFocus
-        " data-view-component="true" class="FormControl-input QueryBuilder-Input FormControl-medium" aria-controls="query-builder-test-results" aria-autocomplete="list" aria-haspopup="listbox" style="width: 300px;">
-          </div>
-        </div>
-          <span data-target="query-builder.clearButton" hidden="">
-            <span class="sr-only" id="query-builder-test-clear">Clear</span>
-            <button role="button" id="query-builder-test-clear-button" aria-labelledby="query-builder-test-clear query-builder-test-label" data-action="
-                  click:query-builder#clear
-                  focus:query-builder#clearButtonFocus
-                  blur:query-builder#clearButtonBlur
-                " variant="small" type="button" data-view-component="true" class="Button Button--iconOnly Button--invisible Button--medium mr-1 px-2 py-0 d-flex flex-items-center rounded-1 color-fg-muted">  <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x-circle-fill Button-visual">
-    <path d="M2.343 13.657A8 8 0 1 1 13.658 2.343 8 8 0 0 1 2.343 13.657ZM6.03 4.97a.751.751 0 0 0-1.042.018.751.751 0 0 0-.018 1.042L6.94 8 4.97 9.97a.749.749 0 0 0 .326 1.275.749.749 0 0 0 .734-.215L8 9.06l1.97 1.97a.749.749 0 0 0 1.275-.326.749.749 0 0 0-.215-.734L9.06 8l1.97-1.97a.749.749 0 0 0-.326-1.275.749.749 0 0 0-.734.215L8 6.94Z"></path>
-</svg>
-</button>
-
-          </span>
-      </div>
-      <template id="search-icon"></template>
-
-<template id="code-icon"></template>
-
-<template id="file-code-icon"></template>
-
-<template id="history-icon"></template>
-
-<template id="repo-icon"></template>
-
-<template id="bookmark-icon"></template>
-
-<template id="plus-circle-icon"></template>
-
-<template id="circle-icon"></template>
-
-<template id="trash-icon"></template>
-
-<template id="team-icon"></template>
-
-<template id="project-icon"></template>
-
-<template id="pencil-icon"></template>
-
-<template id="copilot-icon"></template>
-
-<template id="copilot-error-icon"></template>
-
-<template id="workflow-icon"></template>
-
-<template id="book-icon"></template>
-
-<template id="code-review-icon"></template>
-
-<template id="codespaces-icon"></template>
-
-<template id="comment-icon"></template>
-
-<template id="comment-discussion-icon"></template>
-
-<template id="organization-icon"></template>
-
-<template id="rocket-icon"></template>
-
-<template id="shield-check-icon"></template>
-
-<template id="heart-icon"></template>
-
-<template id="server-icon"></template>
-
-<template id="globe-icon"></template>
-
-<template id="issue-opened-icon"></template>
-
-<template id="device-mobile-icon"></template>
-
-<template id="package-icon"></template>
-
-<template id="credit-card-icon"></template>
-
-<template id="play-icon"></template>
-
-<template id="gift-icon"></template>
-
-<template id="code-square-icon"></template>
-
-<template id="device-desktop-icon"></template>
-
-        <div class="position-relative">
-                        <ul role="listbox" class="ActionListWrap QueryBuilder-ListWrap" aria-label="Suggestions" data-action="
-                combobox-commit:query-builder#comboboxCommit
-                mousedown:query-builder#resultsMousedown
-              " data-target="query-builder.resultsList" data-persist-list="false" id="query-builder-test-results" tabindex="-1"></ul>
-
-        </div>
-      <div class="FormControl-inlineValidation" id="validation-0a10dea7-1b65-4474-9de3-cd7d4259cea5" hidden="hidden">
-        <span class="FormControl-inlineValidation--visual">
-          <svg aria-hidden="true" height="12" viewBox="0 0 12 12" version="1.1" width="12" data-view-component="true" class="octicon octicon-alert-fill">
-    <path d="M4.855.708c.5-.896 1.79-.896 2.29 0l4.675 8.351a1.312 1.312 0 0 1-1.146 1.954H1.33A1.313 1.313 0 0 1 .183 9.058ZM7 7V3H5v4Zm-1 3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"></path>
-</svg>
-        </span>
-        <span></span>
-</div>    </div>
-    <div data-target="query-builder.screenReaderFeedback" aria-live="polite" aria-atomic="true" class="sr-only">0 suggestions.</div>
-</query-builder></form>
-          <div class="d-flex flex-row color-fg-muted tmp-px-3 text-small color-bg-default search-feedback-prompt">
-            <a target="_blank" href="https://docs.github.com/search-github/github-code-search/understanding-github-code-search-syntax" data-view-component="true" class="Link color-fg-accent text-normal ml-2">Search syntax tips</a>            <div class="d-flex flex-1"></div>
-              <button data-action="click:qbsearch-input#showFeedbackDialog" type="button" data-view-component="true" class="Button--link Button--medium Button color-fg-accent text-normal ml-2">  <span class="Button-content">
-    <span class="Button-label">Give feedback</span>
-  </span>
-</button>
-          </div>
-        </div>
-</div>
-
-    </div>
-</modal-dialog></div>
-  </div>
-  <div data-action="click:qbsearch-input#retract" class="dark-backdrop position-fixed" hidden="" data-target="qbsearch-input.darkBackdrop"></div>
-  <div class="color-fg-default">
-    
-<dialog-helper>
-  <dialog data-target="qbsearch-input.feedbackDialog" data-action="close:qbsearch-input#handleDialogClose cancel:qbsearch-input#handleDialogClose" id="feedback-dialog" aria-modal="true" aria-labelledby="feedback-dialog-title" aria-describedby="feedback-dialog-description" data-view-component="true" class="Overlay Overlay-whenNarrow Overlay--size-medium Overlay--motion-scaleFade Overlay--disableScroll">
-    <div data-view-component="true" class="Overlay-header">
-  <div class="Overlay-headerContentWrap">
-    <div class="Overlay-titleWrap">
-      <h1 class="Overlay-title " id="feedback-dialog-title">
-        Provide feedback
-      </h1>
-        
-    </div>
-    <div class="Overlay-actionWrap">
-      <button data-close-dialog-id="feedback-dialog" aria-label="Close" type="button" data-view-component="true" class="close-button Overlay-closeButton"><svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x">
-    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
-</svg></button>
-    </div>
-  </div>
-  
-</div>
-      <scrollable-region data-labelled-by="feedback-dialog-title" data-catalyst="" style="overflow: auto;">
-        <div data-view-component="true" class="Overlay-body">        <!-- '"` --><!-- </textarea></xmp> --><form id="code-search-feedback-form" data-turbo="false" action="https://github.com/search/feedback" accept-charset="UTF-8" method="post"><input type="hidden" name="authenticity_token" value="vEMwL3w8UX3FNotCt5V8AYSv7i7pRSzqRpiVKNqt1ujU-Fi-vJ-lUf9tOvZ3CjUFBInKTEdaqX5DsaMaBOmHxA">
-          <p>We read every piece of feedback, and take your input very seriously.</p>
-          <textarea name="feedback" class="form-control width-full mb-2" style="height: 120px" id="feedback"></textarea>
-          <input name="include_email" id="include_email" aria-label="Include my email address so I can be contacted" class="form-control mr-2" type="checkbox">
-          <label for="include_email" style="font-weight: normal">Include my email address so I can be contacted</label>
-</form></div>
-      </scrollable-region>
-      <div data-view-component="true" class="Overlay-footer Overlay-footer--alignEnd">          <button data-close-dialog-id="feedback-dialog" type="button" data-view-component="true" class="btn">    Cancel
-</button>
-          <button form="code-search-feedback-form" data-action="click:qbsearch-input#submitFeedback" type="submit" data-view-component="true" class="btn-primary btn">    Submit feedback
-</button>
-</div>
-</dialog></dialog-helper>
-
-    <custom-scopes data-target="qbsearch-input.customScopesManager" data-catalyst="">
-    
-<dialog-helper>
-  <dialog data-target="custom-scopes.customScopesModalDialog" data-action="close:qbsearch-input#handleDialogClose cancel:qbsearch-input#handleDialogClose" id="custom-scopes-dialog" aria-modal="true" aria-labelledby="custom-scopes-dialog-title" aria-describedby="custom-scopes-dialog-description" data-view-component="true" class="Overlay Overlay-whenNarrow Overlay--size-medium Overlay--motion-scaleFade Overlay--disableScroll">
-    <div data-view-component="true" class="Overlay-header Overlay-header--divided">
-  <div class="Overlay-headerContentWrap">
-    <div class="Overlay-titleWrap">
-      <h1 class="Overlay-title " id="custom-scopes-dialog-title">
-        Saved searches
-      </h1>
-        <h2 id="custom-scopes-dialog-description" class="Overlay-description">Use saved searches to filter your results more quickly</h2>
-    </div>
-    <div class="Overlay-actionWrap">
-      <button data-close-dialog-id="custom-scopes-dialog" aria-label="Close" type="button" data-view-component="true" class="close-button Overlay-closeButton"><svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x">
-    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
-</svg></button>
-    </div>
-  </div>
-  
-</div>
-      <scrollable-region data-labelled-by="custom-scopes-dialog-title" data-catalyst="" style="overflow: auto;">
-        <div data-view-component="true" class="Overlay-body">        <div data-target="custom-scopes.customScopesModalDialogFlash"></div>
-
-        <div hidden="" class="create-custom-scope-form" data-target="custom-scopes.createCustomScopeForm">
-        <!-- '"` --><!-- </textarea></xmp> --><form id="custom-scopes-dialog-form" data-turbo="false" action="https://github.com/search/custom_scopes" accept-charset="UTF-8" method="post"><input type="hidden" name="authenticity_token" value="NyDVE1YQPfltsVI2uLZ2DSMuPfKqnNHj5UMJQNELcdZJrLWP6wjCUgK85Y42VOaA_Jb2y8EM8sTEOgjKZXGabg">
-          <div data-target="custom-scopes.customScopesModalDialogFlash"></div>
-
-          <input type="hidden" id="custom_scope_id" name="custom_scope_id" data-target="custom-scopes.customScopesIdField">
-
-          <div class="form-group">
-            <label for="custom_scope_name">Name</label>
-            <auto-check src="/search/custom_scopes/check_name" required="">
-              <input type="text" name="custom_scope_name" id="custom_scope_name" data-target="custom-scopes.customScopesNameField" class="form-control" autocomplete="off" placeholder="github-ruby" required="" maxlength="50" spellcheck="false">
-              <input type="hidden" value="rgdFJclngy4SUEzeTAUJWa6sULf9_A3FUOY8BEWAvEivmnWOFym5IqzSTvlozTRqgH4TjRs2e2Ot_oUxGLTJRg" data-csrf="true">
-            </auto-check>
-          </div>
-
-          <div class="form-group">
-            <label for="custom_scope_query">Query</label>
-            <input type="text" name="custom_scope_query" id="custom_scope_query" data-target="custom-scopes.customScopesQueryField" class="form-control" autocomplete="off" placeholder="(repo:mona/a OR repo:mona/b) AND lang:python" required="" maxlength="500">
-          </div>
-
-          <p class="text-small color-fg-muted">
-            To see all available qualifiers, see our <a class="Link--inTextBlock" href="https://docs.github.com/search-github/github-code-search/understanding-github-code-search-syntax">documentation</a>.
-          </p>
-</form>        </div>
-
-        <div data-target="custom-scopes.manageCustomScopesForm">
-          <div data-target="custom-scopes.list"></div>
-        </div>
-
-</div>
-      </scrollable-region>
-      <div data-view-component="true" class="Overlay-footer Overlay-footer--alignEnd Overlay-footer--divided">          <button data-action="click:custom-scopes#customScopesCancel" type="button" data-view-component="true" class="btn">    Cancel
-</button>
-          <button form="custom-scopes-dialog-form" data-action="click:custom-scopes#customScopesSubmit" data-target="custom-scopes.customScopesSubmitButton" type="submit" data-view-component="true" class="btn-primary btn">    Create saved search
-</button>
-</div>
-</dialog></dialog-helper>
-    </custom-scopes>
-  </div>
-</qbsearch-input>  <input type="hidden" value="8lpIPwzmimMYHSglZo0efU_g3c5XBZ6QlxvSKGOHzb524RfuZH0JwqK-x8suKxpIwWPiLaCFrqbfCxCGyjp69w" data-csrf="true" class="js-data-jump-to-suggestions-path-csrf">
-
-
-      </div>
-
-
-      <div hidden="hidden" data-view-component="true" class="js-stale-session-flash stale-session-flash flash flash-warn flash-full">
-  
-        <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-alert">
-    <path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path>
-</svg>
-        <span class="js-stale-session-flash-signed-in" hidden="">You signed in with another tab or window. <a class="Link--inTextBlock" href="https://github.com/studychannel/2dminecraft/upload">Reload</a> to refresh your session.</span>
-        <span class="js-stale-session-flash-signed-out" hidden="">You signed out in another tab or window. <a class="Link--inTextBlock" href="https://github.com/studychannel/2dminecraft/upload">Reload</a> to refresh your session.</span>
-        <span class="js-stale-session-flash-switched" hidden="">You switched accounts on another tab or window. <a class="Link--inTextBlock" href="https://github.com/studychannel/2dminecraft/upload">Reload</a> to refresh your session.</span>
-
-    <button id="icon-button-ce3296bf-bd46-4889-b522-b285975db5ba" aria-labelledby="tooltip-ae4649c4-f5da-4680-bc3c-8df2ba6de072" type="button" data-view-component="true" class="Button Button--iconOnly Button--invisible Button--medium flash-close js-flash-close">  <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x Button-visual">
-    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
-</svg>
-</button><tool-tip id="tooltip-ae4649c4-f5da-4680-bc3c-8df2ba6de072" for="icon-button-ce3296bf-bd46-4889-b522-b285975db5ba" popover="manual" data-direction="s" data-type="label" data-view-component="true" class="sr-only position-absolute" aria-hidden="true" role="tooltip"><template shadowrootmode="open"><style>
-      :host {
-        --tooltip-top: var(--tool-tip-position-top, 0);
-        --tooltip-left: var(--tool-tip-position-left, 0);
-        padding: var(--overlay-paddingBlock-condensed) var(--overlay-padding-condensed) !important;
-        font: var(--text-body-shorthand-small);
-        color: var(--tooltip-fgColor, var(--fgColor-onEmphasis)) !important;
-        text-align: center;
-        text-decoration: none;
-        text-shadow: none;
-        text-transform: none;
-        letter-spacing: normal;
-        word-wrap: break-word;
-        white-space: pre;
-        background: var(--tooltip-bgColor, var(--bgColor-emphasis)) !important;
-        border-radius: var(--borderRadius-medium);
-        border: 0 !important;
-        opacity: 0;
-        max-width: min(var(--overlay-width-small), 100vw);
-        word-wrap: break-word;
-        white-space: normal;
-        width: max-content !important;
-        inset: var(--tooltip-top) auto auto var(--tooltip-left) !important;
-        overflow: visible !important;
-        text-wrap: balance;
+    // Underground mushrooms
+    if(hsh(x*9999+777)<0.02) {
+      const my=sy+8+Math.floor(hsh(x*8888+11)*14);
+      if(my<WH-2&&d[my*CHUNK_W+lx]===B.AIR&&d[(my+1)*CHUNK_W+lx]!==B.AIR) d[my*CHUNK_W+lx]=B.MUSHROOM;
+    }
+  }
+  // Caves
+  for(let ci=0;ci<3;ci++) {
+    let cvx=cx*CHUNK_W+hsh(cx*101+ci*33)*CHUNK_W*2-CHUNK_W*0.5;
+    let cvy=50+hsh(cx*202+ci*44)*22;
+    let ang=hsh(cx*303+ci*55)*Math.PI*2;
+    for(let j=0;j<60;j++) {
+      ang+=(hsh(ci*1000+j+cx*7)-0.5)*0.75;
+      cvx+=Math.cos(ang)*1.6; cvy+=Math.sin(ang)*1.0;
+      const r=2+Math.floor(hsh(ci*500+j+cx*13)*2);
+      for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++) {
+        if(dx*dx+dy*dy>r*r) continue;
+        const bx=Math.floor(cvx+dx), by=Math.floor(cvy+dy);
+        if(by<5||by>=WH-1) continue;
+        if(gcx(bx)!==cx) continue;
+        const ll=glx(bx);
+        if(d[by*CHUNK_W+ll]!==B.BEDROCK) d[by*CHUNK_W+ll]=B.AIR;
       }
+    }
+  }
+}
 
-      :host(:is(.tooltip-n, .tooltip-nw, .tooltip-ne)) {
-        --tooltip-top: calc(var(--tool-tip-position-top, 0) - var(--overlay-offset, 0.25rem));
-        --tooltip-left: var(--tool-tip-position-left);
-      }
+function placeTree(d,cx,x,baseY) {
+  const h=4+Math.floor(hsh(x*555+baseY*111)*2);
+  for(let i=0;i<h;i++) {
+    const y=baseY-i; if(y<0||y>=WH) continue;
+    if(gcx(x)===cx) d[y*CHUNK_W+glx(x)]=B.LOG;
+  }
+  const top=baseY-h;
+  for(let dy=-2;dy<=1;dy++) for(let dx=-2;dx<=2;dx++) {
+    if(Math.abs(dx)+Math.abs(dy)>3) continue;
+    const lx2=x+dx, ly2=top+dy;
+    if(ly2<0||ly2>=WH||gcx(lx2)!==cx) continue;
+    if(d[ly2*CHUNK_W+glx(lx2)]===B.AIR) d[ly2*CHUNK_W+glx(lx2)]=B.LEAVES;
+  }
+}
 
-      :host(:is(.tooltip-s, .tooltip-sw, .tooltip-se)) {
-        --tooltip-top: calc(var(--tool-tip-position-top, 0) + var(--overlay-offset, 0.25rem));
-        --tooltip-left: var(--tool-tip-position-left);
-      }
+/* ============ STATE ============ */
+let cv,ctx,Wpx,Hpx;
+let entities=[],arrows=[];
+let player;
+let cam={x:0,y:0};
+let time=4000,tick=0;
+let keys={},mouse={x:0,y:0,left:false};
+let targetBlock=null;
+let breakProg=0,breakTmr=0;
+let showInv=false,showTool=false;
+let toolScroll=0;
+let invClick=null,toolClick=null;
+let msgs=[];
+let popText=null; // floating popup text
 
-      :host(.tooltip-w) {
-        --tooltip-top: var(--tool-tip-position-top);
-        --tooltip-left: calc(var(--tool-tip-position-left, 0) - var(--overlay-offset, 0.25rem));
-      }
+/* ============ PLAYER ============ */
+function mkPlayer() {
+  const sy=tH(0);
+  return {
+    x:0,y:(sy-4)*BS,vx:0,vy:0,w:BS*0.75,h:BS*1.8,
+    onGround:false,inWater:false,
+    health:20,maxHealth:20,food:20,maxFood:20,
+    foodDecay:0,xp:0,level:0,facing:1,
+    inventory:new Array(36).fill(null),hotbar:0,
+    atk:0,dmgCD:0,lastVy:0,dead:false
+  };
+}
 
-      :host(.tooltip-e) {
-        --tooltip-top: var(--tool-tip-position-top);
-        --tooltip-left: calc(var(--tool-tip-position-left, 0) + var(--overlay-offset, 0.25rem));
-      }
+function giveStarter(p) {
+  p.inventory[0]={type:'block',id:B.DIRT,   count:64};
+  p.inventory[1]={type:'block',id:B.PLANKS, count:32};
+  p.inventory[2]={type:'block',id:B.STONE,  count:32};
+  p.inventory[3]={type:'block',id:B.GLASS,  count:16};
+  p.inventory[4]={type:'block',id:B.TORCH,  count:20};
+  p.inventory[5]={type:'weapon',id:'i_sword',damage:7,dur:250,count:1,name:'Iron Sword'};
+  p.inventory[6]={type:'tool',  id:'i_pick', speed:5, dur:250,count:1,name:'Iron Pickaxe'};
+  p.inventory[7]={type:'tool',  id:'i_axe',  speed:5, dur:250,count:1,name:'Iron Axe'};
+  p.inventory[8]={type:'food',  id:'bread',  count:6, name:'Bread',restore:5,color:'#D4A844',icon:'🍞'};
+}
 
-      :host:after{
-        position: absolute;
-        display: block;
-        right: 0;
-        left: 0;
-        height: var(--overlay-offset, 0.25rem);
-        content: "";
-      }
+/* ============ NPC DEFS ============ */
+const NPCS = {
+  PIG:     {name:'Pig',     w:BS*1.1,h:BS*0.8, hp:10,hostile:0,xp:1,  color:'#FF9999',dark:'#CC6666'},
+  COW:     {name:'Cow',     w:BS*1.2,h:BS*1.0, hp:10,hostile:0,xp:1,  color:'#5C3A1E',dark:'#2E1A0A'},
+  SHEEP:   {name:'Sheep',   w:BS*1.1,h:BS*0.9, hp:8, hostile:0,xp:1,  color:'#EBEBEB',dark:'#AAAAAA'},
+  CHICKEN: {name:'Chicken', w:BS*0.7,h:BS*0.8, hp:4, hostile:0,xp:1,  color:'#FFFFFF',dark:'#CCCCCC'},
+  ZOMBIE:  {name:'Zombie',  w:BS*0.8,h:BS*1.9, hp:20,hostile:1,xp:5,  color:'#4A7A4A',dark:'#2A4A2A',dmg:3},
+  CREEPER: {name:'Creeper', w:BS*0.8,h:BS*1.7, hp:20,hostile:1,xp:5,  color:'#33AA33',dark:'#1A6E1A',dmg:0,explodes:1},
+  SKELETON:{name:'Skeleton',w:BS*0.7,h:BS*1.9, hp:20,hostile:1,xp:5,  color:'#EEEEEE',dark:'#AAAAAA',dmg:2,ranged:1},
+  SPIDER:  {name:'Spider',  w:BS*1.6,h:BS*0.9, hp:16,hostile:1,xp:5,  color:'#3A1A1A',dark:'#1A0A0A',dmg:2},
+};
 
-      :host(.tooltip-s):after,
-      :host(.tooltip-se):after,
-      :host(.tooltip-sw):after {
-        bottom: 100%
-      }
+// Passive mob interaction dialogs
+const MOB_TALK = {
+  PIG:    ['Oink! 🐷','*sniffs you*','Oink oink!','*happily trots around*'],
+  COW:    ['Moo! 🐮','*licks your face*','Moo moo~','*chews cud contentedly*'],
+  SHEEP:  ['Baa! 🐑','*fluffy boing*','Baaa~','*nuzzles you*'],
+  CHICKEN:['Bwok! 🐔','Cluck cluck!','*pecks at ground*','Bwok bwok bwok!'],
+};
 
-      :host(.tooltip-n):after,
-      :host(.tooltip-ne):after,
-      :host(.tooltip-nw):after {
-        top: 100%;
-      }
+function spawnMob(type,near) {
+  const def=NPCS[type];
+  const ox=(Math.random()-0.5)*BS*60;
+  const bx=Math.round((near.x+ox)/BS);
+  let by=5;
+  while(by<WH-2&&gB(bx,by)===B.AIR) by++;
+  const sx=bx*BS, sy=(by-2)*BS;
+  entities.push({
+    type,...def,x:sx,y:sy,vx:0,vy:0,
+    health:def.hp,maxHealth:def.hp,
+    onGround:false,inWater:false,
+    aiState:'idle',aiTmr:0,walkDir:1,
+    dmgCD:0,atkCD:0,explodeTmr:0,
+    fleeTmr:0,dead:false,id:Math.random()
+  });
+}
 
-      @keyframes tooltip-appear {
-        from {
-          opacity: 0;
-        }
-        to {
-          opacity: 1;
+function spawnInitial() {
+  const p=['PIG','COW','SHEEP','CHICKEN'];
+  const h=['ZOMBIE','CREEPER','SKELETON','SPIDER'];
+  for(let i=0;i<8;i++) spawnMob(p[i%4],{x:0});
+  for(let i=0;i<4;i++)  spawnMob(h[i%4],{x:0});
+}
+
+/* ============ PHYSICS ============ */
+function isSolid(x,y) {
+  if(x<-9999||x>9999||y<0) return y>=WH;
+  if(y>=WH) return true;
+  const b=gB(x,y);
+  return b&&BD[b]&&BD[b].solid;
+}
+function inWater(bx,by) {
+  if(by<0||by>=WH) return false;
+  return gB(bx,by)===B.WATER;
+}
+
+function physStep(e) {
+  const mx=Math.floor((e.x+e.w/2)/BS), my=Math.floor((e.y+e.h*0.6)/BS);
+  e.inWater=inWater(mx,my);
+  e.vy+=e.inWater?GRAV*0.18:GRAV;
+  if(e.inWater){e.vy*=0.82;e.vx*=0.82;}
+  e.vy=Math.min(e.vy,20);
+
+  e.x+=e.vx;
+  const ly=Math.floor((e.y+2)/BS), ry=Math.floor((e.y+e.h-2)/BS);
+  for(let by=ly;by<=ry;by++) {
+    if(isSolid(Math.floor(e.x/BS),by))         {e.x=Math.floor(e.x/BS)*BS+BS;e.vx=0;}
+    if(isSolid(Math.floor((e.x+e.w-1)/BS),by)) {e.x=Math.floor((e.x+e.w-1)/BS)*BS-e.w;e.vx=0;}
+  }
+  e.onGround=false;
+  e.y+=e.vy;
+  const lx2=Math.floor((e.x+1)/BS), rx2=Math.floor((e.x+e.w-1)/BS);
+  for(let bx=lx2;bx<=rx2;bx++) {
+    if(isSolid(bx,Math.floor(e.y/BS)))       {e.y=Math.floor(e.y/BS)*BS+BS;e.vy=0;}
+    if(isSolid(bx,Math.floor((e.y+e.h)/BS))){e.y=Math.floor((e.y+e.h)/BS)*BS-e.h;e.vy=0;e.onGround=true;}
+  }
+}
+
+/* ============ PLAYER UPDATE ============ */
+function updPlayer() {
+  if(player.dead) return;
+  const sp=player.inWater?SPD*0.45:SPD;
+  if(keys['ArrowLeft']||keys['KeyA'])  {player.vx=-sp;player.facing=-1;}
+  else if(keys['ArrowRight']||keys['KeyD']){player.vx=sp;player.facing=1;}
+  else {player.vx*=0.65;if(Math.abs(player.vx)<0.1)player.vx=0;}
+  if((keys['ArrowUp']||keys['KeyW']||keys['Space'])&&player.onGround){player.vy=JUMP;player.onGround=false;}
+  if(player.inWater&&(keys['ArrowUp']||keys['KeyW']||keys['Space']))player.vy=-3;
+
+  physStep(player);
+  if(player.y>WH*BS+300) respawn();
+
+  // Camera
+  cam.x=player.x+player.w/2-Wpx/2;
+  cam.y=player.y+player.h/2-Hpx/2;
+  cam.y=Math.max(0,Math.min(WH*BS-Hpx,cam.y));
+
+  // Pre-gen chunks around player
+  const pcx=gcx(Math.floor(player.x/BS));
+  for(let i=-4;i<=4;i++) ens(pcx+i);
+
+  // Target block
+  const wx=mouse.x+cam.x, wy=mouse.y+cam.y;
+  const tbx=Math.floor(wx/BS), tby=Math.floor(wy/BS);
+  const cx2=player.x+player.w/2, cy2=player.y+player.h/2;
+  if(Math.hypot(tbx*BS+BS/2-cx2,tby*BS+BS/2-cy2)<BS*7&&tby>=0&&tby<WH) targetBlock={x:tbx,y:tby};
+  else targetBlock=null;
+
+  // Mining
+  if(mouse.left&&targetBlock&&!showInv&&!showTool) {
+    const bx=targetBlock.x, by=targetBlock.y, b=gB(bx,by);
+    if(b&&b!==B.AIR) {
+      const held=player.inventory[player.hotbar];
+      const sp2=(held&&held.type==='tool')?held.speed||1:1;
+      breakTmr++;
+      breakProg=breakTmr/(BD[b].hard*10/sp2);
+      if(breakProg>=1){mineBlock(bx,by);breakTmr=0;breakProg=0;}
+    }
+  } else {breakTmr=0;breakProg=0;}
+
+  // Fall damage
+  if(player.onGround&&player.lastVy>13) doDmgPlayer(Math.floor((player.lastVy-13)*0.2));
+  player.lastVy=player.vy;
+
+  // Food decay
+  player.foodDecay++;
+  if(player.foodDecay>1200){player.foodDecay=0;if(player.food>0)player.food--;}
+  if(player.food===0&&tick%120===0) doDmgPlayer(1);
+
+  if(player.atk>0) player.atk--;
+  if(player.dmgCD>0) player.dmgCD--;
+}
+
+function respawn() {
+  const sy=tH(0);
+  player.x=0; player.y=(sy-4)*BS;
+  player.vx=0;player.vy=0;
+  player.health=player.maxHealth; player.food=20; player.dead=false;
+  msg('Respawned! 🌍');
+}
+
+function doDmgPlayer(d) {
+  if(player.dmgCD>0) return;
+  player.health=Math.max(0,player.health-d);
+  player.dmgCD=40;
+  if(player.health<=0){player.dead=true;msg('☠ You died! Press R to respawn.');}
+}
+
+function mineBlock(bx,by) {
+  const b=gB(bx,by);
+  if(!b||b===B.AIR||b===B.BEDROCK) return;
+  const def=BD[b];
+  // Drops
+  if(b===B.LEAVES) {
+    if(hsh(tick*111+bx*222+by)<0.25) {addInv({type:'food',id:'apple',count:1,name:'Apple',restore:4,color:'#DD2200',icon:'🍎'});msg('Found an Apple! 🍎');}
+  } else if(b===B.MUSHROOM) {
+    addInv({type:'food',id:'mushroom',count:1,name:'Mushroom',restore:3,color:'#AA3322',icon:'🍄'});
+  } else {
+    const drop=def.drop!==undefined?def.drop:b;
+    if(drop!==B.AIR) addInv({type:'block',id:drop,count:1});
+  }
+  sB(bx,by,B.AIR);
+  msg('Mined: '+def.name);
+}
+
+function placeBlock(bx,by) {
+  if(by<0||by>=WH) return;
+  if(gB(bx,by)!==B.AIR) return;
+  const px=Math.floor(player.x/BS), py=Math.floor(player.y/BS);
+  if(bx>=px-1&&bx<=px+1&&by>=py&&by<=py+2) return;
+  const item=player.inventory[player.hotbar];
+  if(!item||item.type!=='block'){msg('Equip a block to place!');return;}
+  sB(bx,by,item.id);
+  item.count--; if(item.count<=0) player.inventory[player.hotbar]=null;
+}
+
+function eatHeld() {
+  const item=player.inventory[player.hotbar];
+  if(!item||item.type!=='food'){msg('Hold a food item to eat! (G)');return;}
+  const restore=item.restore||4;
+  player.food=Math.min(player.maxFood, player.food+restore);
+  player.health=Math.min(player.maxHealth, player.health+(restore>5?2:1));
+  msg(`Ate ${item.name}! +${restore} food 🍴`);
+  item.count--;
+  if(item.count<=0) player.inventory[player.hotbar]=null;
+}
+
+function attackNearby() {
+  const held=player.inventory[player.hotbar];
+  const dmg=(held&&held.type==='weapon')?held.damage:1;
+  const cx2=player.x+player.w/2, cy2=player.y+player.h/2;
+  let hit=false;
+  entities.filter(e=>e.hostile&&!e.dead&&!e.isProjectile).forEach(e=>{
+    const ex=e.x+e.w/2, ey=e.y+e.h/2;
+    if(Math.hypot(cx2-ex,cy2-ey)<BS*3.5){dmgEnt(e,dmg);hit=true;msg(`Hit ${e.name} for ${dmg}! ⚔`);}
+  });
+  if(!hit) msg('No enemies in range! Use F/Z to attack.');
+}
+
+function interactNearby() {
+  // Right-click: interact with passive mobs or place block
+  if(targetBlock&&gB(targetBlock.x,targetBlock.y)===B.AIR) {
+    placeBlock(targetBlock.x,targetBlock.y); return;
+  }
+  const cx2=player.x+player.w/2, cy2=player.y+player.h/2;
+  for(const e of entities) {
+    if(e.dead||e.hostile) continue;
+    const ex=e.x+e.w/2, ey=e.y+e.h/2;
+    if(Math.hypot(cx2-ex,cy2-ey)<BS*4) {
+      const lines=MOB_TALK[e.type]||[];
+      const line=lines[Math.floor(Math.random()*lines.length)]||'...';
+      showPop(line,e.x+e.w/2,e.y-10);
+      msg(`${e.name}: "${line.replace(/[^a-zA-Z0-9!?~.*]/g,'').substring(0,20)}"`);
+      // Passive trade bonus
+      if(hsh(tick*e.id)<0.2&&e.type==='COW')   {addInv({type:'food',id:'beef',count:1,name:'Beef',restore:8,color:'#AA3322',icon:'🥩'});msg('Cow gifted you some Beef! 🐮');}
+      if(hsh(tick*e.id)<0.15&&e.type==='CHICKEN'){addInv({type:'food',id:'raw_chicken',count:1,name:'Raw Chicken',restore:6,color:'#DDAA77',icon:'🍗'});msg('Chicken dropped a gift! 🐔');}
+      return;
+    }
+  }
+  // Fallback: place block
+  if(targetBlock) placeBlock(targetBlock.x,targetBlock.y);
+}
+
+function addInv(item) {
+  // Stack food/blocks
+  for(let i=0;i<36;i++) {
+    const s=player.inventory[i];
+    if(s&&s.id===item.id&&s.type===item.type&&s.count<64){s.count+=item.count;return true;}
+  }
+  for(let i=0;i<36;i++) {if(!player.inventory[i]){player.inventory[i]={...item};return true;}}
+  msg('Inventory full!'); return false;
+}
+
+/* ============ ENTITY AI ============ */
+function updEntities() {
+  const dayF=getDayF();
+  entities=entities.filter(e=>!e.dead);
+
+  entities.forEach(e=>{
+    if(e.isProjectile) return;
+    physStep(e);
+    if(e.dmgCD>0) e.dmgCD--;
+    if(e.atkCD>0) e.atkCD--;
+    if(e.aiTmr>0) e.aiTmr--;
+    if(e.fleeTmr>0) e.fleeTmr--;
+
+    const px=player.x+player.w/2, py=player.y+player.h/2;
+    const ex=e.x+e.w/2, ey=e.y+e.h/2;
+    const dist=Math.hypot(px-ex,py-ey);
+    if(e.hostile) hostileAI(e,dist,px,py,ex,ey,dayF);
+    else          passiveAI(e,dist,px,py,ex,ey);
+  });
+
+  // Keep population up
+  if(tick%1200===0) {
+    const pass=entities.filter(e=>!e.hostile&&!e.dead).length;
+    const host=entities.filter(e=>e.hostile&&!e.dead).length;
+    const p=['PIG','COW','SHEEP','CHICKEN'];
+    const h=['ZOMBIE','CREEPER','SKELETON','SPIDER'];
+    if(pass<20) spawnMob(p[tick%4],player);
+    if(host<50) spawnMob(h[tick%4],player);
+    // Cleanup far entities
+    entities=entities.filter(e=>Math.hypot(e.x-player.x,e.y-player.y)<BS*200);
+  }
+}
+
+function passiveAI(e,dist,px,py,ex,ey) {
+  // Flee if recently hurt
+  if(e.fleeTmr>0) {
+    const dir=ex>px?1:-1; e.vx=dir*3.0;
+    if(e.onGround) { const nx=Math.floor((e.x+e.vx+(e.vx>0?e.w:0))/BS), fy=Math.floor((e.y+e.h+1)/BS);
+      if(!isSolid(nx,fy)) e.vy=-8; }
+    return;
+  }
+  if(e.aiTmr<=0) {
+    e.aiTmr=60+Math.random()*100;
+    e.aiState=Math.random()<0.55?'walk':'idle';
+    if(e.aiState==='walk') e.walkDir=Math.random()<0.5?-1:1;
+  }
+  if(e.aiState==='walk') {
+    e.vx=e.walkDir*1.4;
+    const nx=Math.floor((e.x+e.vx+(e.walkDir>0?e.w:0))/BS), fy=Math.floor((e.y+e.h+1)/BS);
+    if(!isSolid(nx,fy)||isSolid(nx,fy-1)) e.walkDir*=-1;
+  } else e.vx*=0.7;
+  if(e.onGround&&Math.random()<0.003) e.vy=-5.5;
+}
+
+function hostileAI(e,dist,px,py,ex,ey,dayF) {
+  if(e.type==='ZOMBIE'&&dayF>0.65&&tick%40===0) { e.health-=1; if(e.health<=0){killEnt(e);return;} }
+  const agR=BS*20;
+  if(dist<agR) {
+    const dir=px>ex?1:-1; e.walkDir=dir;
+    if(e.type==='CREEPER') {
+      if(dist<BS*2.8) {
+        e.explodeTmr++; e.vx*=0.7;
+        if(e.explodeTmr>50){explode(e.x,e.y,5);e.dead=true;}
+      } else {e.explodeTmr=0;e.vx=dir*2.8;}
+    } else if(e.type==='SKELETON') {
+      if(dist>BS*9) e.vx=dir*2.2; else if(dist<BS*5) e.vx=-dir*2; else e.vx*=0.7;
+      if(e.atkCD<=0&&dist<BS*18&&!player.dead){fireArrow(e,px,py);e.atkCD=70;}
+    } else {
+      e.vx=dir*2.5;
+      if(dist<BS*1.9&&e.atkCD<=0&&!player.dead){doDmgPlayer(e.dmg||2);e.atkCD=35;msg(e.name+' hit you! ❤');}
+    }
+    if(e.onGround) {
+      const nx=Math.floor((e.x+e.vx+(e.walkDir>0?e.w:0))/BS), fy=Math.floor((e.y+e.h-1)/BS);
+      if(isSolid(nx,fy)&&!isSolid(nx,fy-1)) e.vy=-9;
+    }
+  } else {
+    if(e.aiTmr<=0){e.aiTmr=80+Math.random()*100;e.aiState=Math.random()<0.4?'walk':'idle';if(e.aiState==='walk')e.walkDir=Math.random()<0.5?-1:1;}
+    if(e.aiState==='walk') e.vx=e.walkDir*1.5; else e.vx*=0.7;
+  }
+}
+
+function fireArrow(from,tx,ty) {
+  const ex=from.x+from.w/2, ey=from.y+from.h*0.4;
+  const dx=tx-ex, dy=ty-ey, len=Math.hypot(dx,dy);
+  arrows.push({x:ex,y:ey,vx:(dx/len)*9,vy:(dy/len)*9-1,w:BS*0.25,h:BS*0.12,damage:3,dead:false});
+}
+
+function updArrows() {
+  arrows=arrows.filter(a=>!a.dead);
+  arrows.forEach(a=>{
+    a.vy+=GRAV*0.4; a.x+=a.vx; a.y+=a.vy;
+    if(isSolid(Math.floor((a.x+a.w/2)/BS),Math.floor((a.y+a.h/2)/BS))){a.dead=true;return;}
+    if(a.y>WH*BS){a.dead=true;return;}
+    const px=player.x,py=player.y;
+    if(a.x<px+player.w&&a.x+a.w>px&&a.y<py+player.h&&a.y+a.h>py){doDmgPlayer(a.damage);a.dead=true;msg('Arrow hit you! 🏹');}
+  });
+}
+
+function explode(ex,ey,rad) {
+  const bx=Math.floor(ex/BS), by=Math.floor(ey/BS);
+  for(let dy=-rad;dy<=rad;dy++) for(let dx=-rad;dx<=rad;dx++) {
+    if(dx*dx+dy*dy<=rad*rad) {const nx=bx+dx,ny=by+dy;if(ny>0&&ny<WH-1&&gB(nx,ny)!==B.BEDROCK)sB(nx,ny,B.AIR);}
+  }
+  const d=Math.hypot(player.x+player.w/2-ex,player.y+player.h/2-ey);
+  if(d<rad*BS){doDmgPlayer(Math.ceil((1-d/(rad*BS))*10));msg('💥 BOOM! Creeper exploded!');}
+}
+
+function dmgEnt(e,d) {
+  if(e.dmgCD>0||e.dead) return;
+  e.health-=d; e.dmgCD=20;
+  if(!e.hostile) {e.fleeTmr=200;}
+  if(e.health<=0) killEnt(e);
+}
+
+function killEnt(e) {
+  e.dead=true; player.xp+=e.xp||0;
+  // Drops
+  const drops={PIG:'porkchop',COW:'beef',CHICKEN:'raw_chicken'};
+  if(drops[e.type]) {
+    const fid=drops[e.type], fd=FOODS[fid];
+    addInv({type:'food',id:fid,count:1+(hsh(tick*e.id)<0.3?1:0),name:fd.name,restore:fd.restore,color:fd.color,icon:fd.icon});
+    msg(`${e.name} dropped ${fd.name}! ${fd.icon}`);
+  }
+  msg(`${e.name} defeated! +${e.xp} XP ✨`);
+}
+
+function showPop(text,wx,wy) {
+  popText={text,wx,wy,life:120};
+}
+
+/* ============ DAY/NIGHT ============ */
+function getDayF() {
+  const n=(time%DAY)/DAY;
+  if(n<0.2||n>0.8) return 0;
+  return Math.sin((n-0.2)/0.6*Math.PI);
+}
+function getSky() {
+  const f=getDayF(), bio=getBiome(Math.floor((player.x/BS)));
+  let r=Math.floor(f*95+5), g=Math.floor(f*148+8), b=Math.floor(f*220+12);
+  if(bio==='desert') {r=Math.min(255,r+30);g=Math.min(255,g+10);}
+  if(bio==='mountain') {r=Math.max(0,r-10);g=Math.max(0,g-5);}
+  return `rgb(${r},${g},${b})`;
+}
+
+/* ============ CRAFTING ============ */
+function countInInv(id,type) {
+  let c=0;
+  player.inventory.forEach(s=>{if(s&&s.id===id&&(!type||s.type===type)) c+=s.count;});
+  return c;
+}
+function canCraft(r) { return r.req.every(rq=>countInInv(rq.id)>=rq.count); }
+function doCraft(r) {
+  if(!canCraft(r)){msg('Not enough materials!');return;}
+  r.req.forEach(rq=>{
+    let rem=rq.count;
+    for(let i=0;i<36&&rem>0;i++){
+      const s=player.inventory[i];
+      if(s&&s.id===rq.id){const t=Math.min(rem,s.count);s.count-=t;rem-=t;if(s.count<=0)player.inventory[i]=null;}
+    }
+  });
+  addInv({...r.result});
+  msg(`Crafted: ${r.name} ✅`);
+}
+
+/* ============ RENDERING ============ */
+let stars=null;
+function render() {
+  ctx.clearRect(0,0,Wpx,Hpx);
+  const dayF=getDayF();
+  const grad=ctx.createLinearGradient(0,0,0,Hpx);
+  grad.addColorStop(0,getSky());
+  grad.addColorStop(1,dayF>0.1?'#87CEEB':'#0A0A22');
+  ctx.fillStyle=grad; ctx.fillRect(0,0,Wpx,Hpx);
+
+  // Stars
+  if(dayF<0.35) {
+    if(!stars) stars=Array.from({length:140},()=>({x:Math.random()*Wpx,y:Math.random()*Hpx*0.6,r:Math.random()*1.6+0.3,a:Math.random()*0.5+0.5}));
+    const op=Math.max(0,1-dayF*3.5);
+    stars.forEach(s=>{ctx.globalAlpha=s.a*op;ctx.fillStyle='#FFF';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();});
+    ctx.globalAlpha=1;
+  }
+
+  // Celestials
+  const nt=(time%DAY)/DAY;
+  const sa=nt*Math.PI*2-Math.PI/2;
+  const sx=Wpx/2+Math.cos(sa)*Wpx*0.38, sy2=Hpx/2+Math.sin(sa)*Hpx*0.52;
+  if(dayF>0.01){ctx.save();ctx.shadowColor='#FFD700';ctx.shadowBlur=28;ctx.fillStyle='#FFD700';ctx.beginPath();ctx.arc(sx,sy2,24,0,Math.PI*2);ctx.fill();ctx.fillStyle='#FFFF88';ctx.beginPath();ctx.arc(sx,sy2,14,0,Math.PI*2);ctx.fill();ctx.restore();}
+  const ma=(nt+0.5)*Math.PI*2-Math.PI/2;
+  const mxp=Wpx/2+Math.cos(ma)*Wpx*0.38, myp=Hpx/2+Math.sin(ma)*Hpx*0.52;
+  if(dayF<0.3){ctx.save();ctx.shadowColor='#9999FF';ctx.shadowBlur=14;ctx.fillStyle='#DDEEFF';ctx.beginPath();ctx.arc(mxp,myp,18,0,Math.PI*2);ctx.fill();ctx.restore();}
+
+  // World
+  ctx.save(); ctx.translate(-cam.x,-cam.y);
+  const vx0=Math.floor(cam.x/BS)-1, vx1=Math.ceil((cam.x+Wpx)/BS)+1;
+  const vy0=Math.max(0,Math.floor(cam.y/BS)-1), vy1=Math.min(WH,Math.ceil((cam.y+Hpx)/BS)+1);
+
+  for(let by=vy0;by<vy1;by++) {
+    for(let bx=vx0;bx<vx1;bx++) {
+      const b=gB(bx,by);
+      if(!b) continue;
+      const def=BD[b]; if(!def||!def.color) continue;
+      drawBlock(b,def,bx*BS,by*BS,bx,by);
+    }
+  }
+
+  // Break overlay
+  if(targetBlock&&breakProg>0) {
+    const bx=targetBlock.x*BS, by=targetBlock.y*BS;
+    ctx.fillStyle=`rgba(0,0,0,${breakProg*0.38})`; ctx.fillRect(bx,by,BS,BS);
+    ctx.strokeStyle=`rgba(0,0,0,0.7)`; ctx.lineWidth=1.5;
+    for(let i=0;i<Math.ceil(breakProg*5);i++){
+      ctx.beginPath();ctx.moveTo(bx+4+i*3,by+4);ctx.lineTo(bx+BS-4,by+BS-4-i*2);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(bx+BS-4-i*3,by+4);ctx.lineTo(bx+4,by+BS-4);ctx.stroke();
+    }
+  }
+
+  // Entities
+  entities.filter(e=>!e.dead&&!e.isProjectile).forEach(drawMob);
+
+  // Arrows
+  arrows.filter(a=>!a.dead).forEach(a=>{
+    ctx.save();ctx.translate(a.x+a.w/2,a.y+a.h/2);ctx.rotate(Math.atan2(a.vy,a.vx));
+    ctx.fillStyle='#7B5D3A';ctx.fillRect(-a.w/2,-1.5,a.w,3);
+    ctx.fillStyle='#CCC';ctx.beginPath();ctx.moveTo(a.w/2,0);ctx.lineTo(a.w*0.3,-3);ctx.lineTo(a.w*0.3,3);ctx.fill();
+    ctx.restore();
+  });
+
+  // Player
+  drawPlayer();
+
+  // Target highlight
+  if(targetBlock&&!showInv&&!showTool) {
+    const b=gB(targetBlock.x,targetBlock.y);
+    if(b&&b!==B.AIR){ctx.strokeStyle='rgba(0,0,0,0.7)';ctx.lineWidth=2.5;ctx.strokeRect(targetBlock.x*BS,targetBlock.y*BS,BS,BS);}
+  }
+
+  // Popup text
+  if(popText&&popText.life>0) {
+    const alpha=Math.min(1,popText.life/40);
+    ctx.globalAlpha=alpha;
+    ctx.font='bold 13px "Courier New"'; ctx.textAlign='center';
+    const tw=ctx.measureText(popText.text).width+12;
+    ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(popText.wx-tw/2,popText.wy-18,tw,20);
+    ctx.fillStyle='#FFE082'; ctx.fillText(popText.text,popText.wx,popText.wy-3);
+    ctx.globalAlpha=1;
+    popText.wy-=0.5; popText.life--;
+  }
+
+  ctx.restore(); // end world
+
+  // Night overlay
+  const nf=1-dayF;
+  if(nf>0.55) {ctx.fillStyle=`rgba(0,0,20,${(nf-0.55)*0.75})`;ctx.fillRect(0,0,Wpx,Hpx);}
+
+  drawUI();
+}
+
+/* ============ BLOCK DRAW ============ */
+function drawBlock(b,def,px,py,bx,by) {
+  ctx.save();
+  ctx.fillStyle=def.color; ctx.fillRect(px,py,BS,BS);
+  if(b===B.GRASS&&def.top){ctx.fillStyle=def.top;ctx.fillRect(px,py,BS,5);}
+  if(def.spots){ctx.fillStyle=def.spots;[[5,6,5],[15,14,4],[7,20,5]].forEach(([ox,oy,sz])=>ctx.fillRect(px+ox,py+oy,sz,sz));}
+  if(b===B.LEAVES){ctx.globalAlpha=0.8;ctx.fillStyle='#1A5A00';ctx.fillRect(px+2,py+2,BS-4,BS-4);ctx.globalAlpha=1;}
+  if(b===B.LOG){ctx.strokeStyle='#3B2210';ctx.lineWidth=1;ctx.beginPath();ctx.arc(px+BS/2,py+BS/2,BS*0.32,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(px+BS/2,py+BS/2,BS*0.15,0,Math.PI*2);ctx.stroke();}
+  if(b===B.WATER){ctx.fillStyle=`rgba(80,160,255,0.2)`;const wh=3+Math.sin(tick*0.05+bx*0.4)*2;ctx.fillRect(px,py,BS,wh);}
+  if(b===B.TORCH){ctx.fillStyle='#5C3A1E';ctx.fillRect(px+BS/2-2,py+BS*0.25,4,BS*0.55);ctx.fillStyle='#FF9900';ctx.beginPath();ctx.arc(px+BS/2,py+BS*0.22,4,0,Math.PI*2);ctx.fill();ctx.fillStyle='#FFFF00';ctx.beginPath();ctx.arc(px+BS/2,py+BS*0.2,2,0,Math.PI*2);ctx.fill();}
+  if(b===B.CACTUS){ctx.fillStyle='#4AAA4A';ctx.fillRect(px+4,py,BS-8,BS);ctx.fillStyle='#1A5A00';ctx.fillRect(px+6,py,BS-12,BS);ctx.strokeStyle='#2D7A0A';ctx.lineWidth=1;ctx.strokeRect(px+4,py,BS-8,BS);}
+  if(b===B.SNOW){ctx.fillStyle='rgba(255,255,255,0.5)';ctx.fillRect(px,py,BS,3);}
+  if(b===B.MUSHROOM){ctx.fillStyle='#CC2211';ctx.beginPath();ctx.arc(px+BS/2,py+BS*0.3,BS*0.42,Math.PI,0);ctx.fill();ctx.fillStyle='#FFF';[[10,22,4,4],[18,18,5,3],[6,18,4,3]].forEach(([ox,oy,w,h])=>ctx.fillRect(px+ox,py+oy,w,h));ctx.fillStyle='#5C3A1E';ctx.fillRect(px+BS/2-3,py+BS*0.3,6,BS*0.6);}
+  if(b===B.TNT){ctx.fillStyle='#FFF';ctx.font='bold 8px Courier New';ctx.textAlign='center';ctx.fillText('TNT',px+BS/2,py+BS/2+3);}
+  if(def.out){ctx.strokeStyle=def.out;ctx.lineWidth=0.6;ctx.strokeRect(px+0.5,py+0.5,BS-1,BS-1);}
+  ctx.fillStyle='rgba(255,255,255,0.07)';ctx.fillRect(px,py,BS,2);ctx.fillRect(px,py,2,BS);
+  ctx.restore();
+}
+
+/* ============ PLAYER DRAW ============ */
+function drawPlayer() {
+  const px=Math.round(player.x), py=Math.round(player.y), pw=player.w, ph=player.h;
+  ctx.save();
+  if(player.dmgCD>0&&Math.floor(player.dmgCD/4)%2===0) ctx.globalAlpha=0.4;
+  const bob=player.onGround&&Math.abs(player.vx)>0.5?Math.sin(tick*0.22)*3:0;
+  // Legs
+  ctx.fillStyle='#1A3A9A';
+  ctx.fillRect(px+pw*0.08, py+ph*0.62+Math.sin(tick*0.2)*4*Math.sign(player.vx||1)*0.5, pw*0.37, ph*0.38);
+  ctx.fillRect(px+pw*0.55, py+ph*0.62-Math.sin(tick*0.2)*4*Math.sign(player.vx||1)*0.5, pw*0.37, ph*0.38);
+  // Body
+  ctx.fillStyle='#557744'; ctx.fillRect(px+pw*0.05,py+ph*0.35,pw*0.9,ph*0.28);
+  // Arms
+  ctx.fillStyle='#C68642';
+  ctx.fillRect(px-pw*0.24, py+ph*0.36+bob, pw*0.2, ph*0.24);
+  ctx.fillRect(px+pw*0.98, py+ph*0.36-bob, pw*0.2, ph*0.24);
+  // Head
+  ctx.fillStyle='#C68642'; ctx.fillRect(px+pw*0.08,py,pw*0.84,ph*0.35);
+  ctx.fillStyle='#5C3A1E'; ctx.fillRect(px+pw*0.08,py,pw*0.84,ph*0.1);
+  ctx.fillStyle='#FFF';
+  if(player.facing>0) {ctx.fillRect(px+pw*0.52,py+ph*0.1,pw*0.22,ph*0.11);ctx.fillStyle='#224488';ctx.fillRect(px+pw*0.58,py+ph*0.11,pw*0.12,ph*0.09);}
+  else                {ctx.fillRect(px+pw*0.25,py+ph*0.1,pw*0.22,ph*0.11);ctx.fillStyle='#224488';ctx.fillRect(px+pw*0.28,py+ph*0.11,pw*0.12,ph*0.09);}
+  ctx.restore();
+}
+
+/* ============ MOB DRAW ============ */
+function drawMob(e) {
+  const ex=Math.round(e.x),ey=Math.round(e.y),ew=e.w,eh=e.h;
+  ctx.save();
+  if(e.dmgCD>0&&Math.floor(e.dmgCD/4)%2===0) ctx.globalAlpha=0.35;
+  if(e.explodeTmr>30){ctx.globalAlpha=0.5+Math.sin(tick*0.8)*0.5;ctx.fillStyle='#FFF';ctx.fillRect(ex-4,ey-4,ew+8,eh+8);ctx.globalAlpha=1;}
+  switch(e.type){
+    case 'PIG':     drawPig(ex,ey,ew,eh); break;
+    case 'COW':     drawCow(ex,ey,ew,eh); break;
+    case 'SHEEP':   drawSheep(ex,ey,ew,eh); break;
+    case 'CHICKEN': drawChicken(ex,ey,ew,eh); break;
+    case 'ZOMBIE':  drawZombie(ex,ey,ew,eh); break;
+    case 'CREEPER': drawCreeper(ex,ey,ew,eh); break;
+    case 'SKELETON':drawSkeleton(ex,ey,ew,eh); break;
+    case 'SPIDER':  drawSpider(ex,ey,ew,eh); break;
+  }
+  // HP bar
+  ctx.fillStyle='#222'; ctx.fillRect(ex-2,ey-9,ew+4,5);
+  ctx.fillStyle=e.hostile?'#FF2200':'#00BB00'; ctx.fillRect(ex-2,ey-9,(ew+4)*(e.health/e.maxHealth),5);
+  // Nametag
+  ctx.font='10px "Courier New"'; ctx.textAlign='center';
+  const nw=ctx.measureText(e.name).width+8;
+  ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(ex+ew/2-nw/2,ey-22,nw,13);
+  ctx.fillStyle='#FFF'; ctx.fillText(e.name,ex+ew/2,ey-11);
+  // Interact hint
+  if(!e.hostile) {
+    const px=player.x+player.w/2, py=player.y+player.h/2;
+    if(Math.hypot(px-(ex+ew/2),py-(ey+eh/2))<BS*5) {
+      ctx.fillStyle='rgba(255,220,0,0.9)'; ctx.font='9px Courier New'; ctx.textAlign='center';
+      ctx.fillText('[RClick]',ex+ew/2,ey-28);
+    }
+  }
+  ctx.restore();
+}
+
+function drawPig(x,y,w,h){ctx.fillStyle='#FF9999';ctx.fillRect(x+w*0.05,y+h*0.28,w*0.75,h*0.55);ctx.fillStyle='#FFAAAA';ctx.fillRect(x+w*0.5,y+h*0.08,w*0.5,h*0.42);ctx.fillStyle='#FF6666';ctx.fillRect(x+w*0.82,y+h*0.24,w*0.18,h*0.2);[0.08,0.28,0.52,0.68].forEach(o=>{ctx.fillStyle='#FF8888';ctx.fillRect(x+w*o,y+h*0.83,w*0.14,h*0.17);});ctx.fillStyle='#333';ctx.fillRect(x+w*0.64,y+h*0.16,w*0.1,h*0.1);}
+function drawCow(x,y,w,h){ctx.fillStyle='#6B4A2A';ctx.fillRect(x+w*0.05,y+h*0.22,w*0.75,h*0.58);ctx.fillStyle='#F5F5F5';ctx.fillRect(x+w*0.25,y+h*0.27,w*0.28,h*0.22);ctx.fillStyle='#4A2A10';ctx.fillRect(x+w*0.6,y+h*0.04,w*0.4,h*0.38);ctx.fillStyle='#D4B060';ctx.fillRect(x+w*0.65,y,w*0.1,h*0.1);ctx.fillRect(x+w*0.84,y,w*0.1,h*0.1);[0.08,0.28,0.52,0.67].forEach(o=>{ctx.fillStyle='#4A2A10';ctx.fillRect(x+w*o,y+h*0.8,w*0.12,h*0.2);});ctx.fillStyle='#111';ctx.fillRect(x+w*0.68,y+h*0.1,w*0.09,h*0.09);}
+function drawSheep(x,y,w,h){ctx.fillStyle='#DCDCDC';ctx.fillRect(x+w*0.05,y+h*0.18,w*0.75,h*0.58);[0,0.2,0.4,0.6].forEach(o=>{ctx.fillStyle='#C8C8C8';ctx.beginPath();ctx.arc(x+w*(0.12+o),y+h*0.18,w*0.13,0,Math.PI*2);ctx.fill();});ctx.fillStyle='#888';ctx.fillRect(x+w*0.6,y+h*0.08,w*0.38,h*0.36);[0.08,0.26,0.52,0.7].forEach(o=>{ctx.fillStyle='#888';ctx.fillRect(x+w*o,y+h*0.76,w*0.11,h*0.24);});ctx.fillStyle='#111';ctx.fillRect(x+w*0.72,y+h*0.16,w*0.09,h*0.08);}
+function drawChicken(x,y,w,h){ctx.fillStyle='#FFF';ctx.fillRect(x+w*0.2,y+h*0.28,w*0.6,h*0.48);ctx.fillRect(x+w*0.5,y+h*0.05,w*0.38,h*0.3);ctx.fillStyle='#FFB300';ctx.fillRect(x+w*0.85,y+h*0.17,w*0.15,h*0.08);ctx.fillStyle='#FF3300';ctx.fillRect(x+w*0.55,y,w*0.2,h*0.1);ctx.fillStyle='#FFB300';ctx.fillRect(x+w*0.28,y+h*0.76,w*0.1,h*0.24);ctx.fillRect(x+w*0.52,y+h*0.76,w*0.1,h*0.24);ctx.fillStyle='#111';ctx.fillRect(x+w*0.68,y+h*0.11,w*0.08,h*0.07);}
+function drawZombie(x,y,w,h){ctx.fillStyle='#1A3A8A';ctx.fillRect(x+w*0.05,y+h*0.63,w*0.38,h*0.37);ctx.fillRect(x+w*0.57,y+h*0.63,w*0.38,h*0.37);ctx.fillStyle='#3A6A3A';ctx.fillRect(x+w*0.05,y+h*0.33,w*0.9,h*0.3);ctx.fillStyle='#2E5A2E';ctx.fillRect(x-w*0.28,y+h*0.33,w*0.25,h*0.22);ctx.fillRect(x+w,y+h*0.33,w*0.25,h*0.22);ctx.fillStyle='#3A6A3A';ctx.fillRect(x+w*0.1,y,w*0.8,h*0.35);ctx.fillStyle='#FF2200';ctx.fillRect(x+w*0.18,y+h*0.09,w*0.16,h*0.1);ctx.fillRect(x+w*0.62,y+h*0.09,w*0.16,h*0.1);ctx.fillStyle='#222';ctx.fillRect(x+w*0.2,y+h*0.23,w*0.55,h*0.06);}
+function drawCreeper(x,y,w,h){ctx.fillStyle='#1A6E1A';ctx.fillRect(x+w*0.05,y+h*0.67,w*0.37,h*0.33);ctx.fillRect(x+w*0.56,y+h*0.67,w*0.37,h*0.33);ctx.fillStyle='#33AA33';ctx.fillRect(x+w*0.05,y+h*0.34,w*0.9,h*0.33);ctx.fillStyle='#2A9A2A';ctx.fillRect(x+w*0.1,y,w*0.8,h*0.36);ctx.fillStyle='#1A6E1A';ctx.fillRect(x+w*0.14,y+h*0.06,w*0.2,h*0.12);ctx.fillRect(x+w*0.62,y+h*0.06,w*0.2,h*0.12);ctx.fillRect(x+w*0.24,y+h*0.21,w*0.12,h*0.07);ctx.fillRect(x+w*0.6,y+h*0.21,w*0.12,h*0.07);ctx.fillRect(x+w*0.36,y+h*0.26,w*0.24,h*0.09);}
+function drawSkeleton(x,y,w,h){ctx.fillStyle='#CCC';ctx.fillRect(x+w*0.22,y+h*0.64,w*0.18,h*0.36);ctx.fillRect(x+w*0.6,y+h*0.64,w*0.18,h*0.36);ctx.fillStyle='#BBBBBB';ctx.fillRect(x+w*0.22,y+h*0.34,w*0.56,h*0.3);ctx.strokeStyle='#999';ctx.lineWidth=1;for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(x+w*0.24,y+h*(0.37+i*0.07));ctx.lineTo(x+w*0.76,y+h*(0.37+i*0.07));ctx.stroke();}ctx.fillStyle='#BBBBBB';ctx.fillRect(x-w*0.15,y+h*0.34,w*0.16,h*0.25);ctx.fillRect(x+w,y+h*0.34,w*0.16,h*0.25);ctx.fillStyle='#CCC';ctx.fillRect(x+w*0.15,y,w*0.7,h*0.35);ctx.fillStyle='#111';ctx.fillRect(x+w*0.22,y+h*0.08,w*0.18,h*0.12);ctx.fillRect(x+w*0.6,y+h*0.08,w*0.18,h*0.12);}
+function drawSpider(x,y,w,h){ctx.strokeStyle='#2A0A0A';ctx.lineWidth=2;for(let i=0;i<4;i++){const ly=y+h*(0.35+i*0.15);ctx.beginPath();ctx.moveTo(x+w*0.25,ly);ctx.lineTo(x-w*0.35,ly-h*0.08);ctx.stroke();ctx.beginPath();ctx.moveTo(x+w*0.75,ly);ctx.lineTo(x+w*1.35,ly-h*0.08);ctx.stroke();}ctx.fillStyle='#2A0A0A';ctx.beginPath();ctx.ellipse(x+w*0.5,y+h*0.55,w*0.38,h*0.32,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#1A0A0A';ctx.beginPath();ctx.ellipse(x+w*0.78,y+h*0.42,w*0.22,h*0.22,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#FF0000';for(let i=0;i<4;i++){ctx.beginPath();ctx.arc(x+w*(0.62+i*0.08),y+h*0.36,2.5,0,Math.PI*2);ctx.fill();}}
+
+/* ============ UI ============ */
+function drawUI() {
+  drawHotbar(); drawHealth(); drawFood(); drawXPBar();
+  drawClock(); drawMsgs(); drawCross(); drawMinimap(); drawBiomeTag();
+  if(showInv) drawInventory();
+  else if(showTool) drawToolbox();
+  if(player.dead) drawDeath();
+  if(!showInv&&!showTool) drawControls();
+}
+
+function drawHotbar() {
+  const SZ=46,SLOTS=9,TW=SLOTS*SZ+10;
+  const hx=Wpx/2-TW/2, hy=Hpx-SZ-10;
+  ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(hx-4,hy-4,TW+8,SZ+8);
+  for(let i=0;i<SLOTS;i++){
+    const sx=hx+i*SZ, sy=hy;
+    ctx.fillStyle=i===player.hotbar?'rgba(255,255,120,0.22)':'rgba(80,80,80,0.55)';
+    ctx.fillRect(sx+1,sy+1,SZ-2,SZ-2);
+    if(i===player.hotbar){ctx.strokeStyle='#FFE';ctx.lineWidth=2.5;ctx.strokeRect(sx,sy,SZ,SZ);}
+    const item=player.inventory[i];
+    if(item) drawItemSlot(item,sx+4,sy+4,SZ-8);
+    ctx.fillStyle='#AAA';ctx.font='9px Courier New';ctx.textAlign='left';ctx.fillText(i+1,sx+4,sy+SZ-3);
+  }
+  // Held item name
+  const held=player.inventory[player.hotbar];
+  if(held){
+    const nm=held.name||(held.type==='block'&&BD[held.id]?BD[held.id].name:'?');
+    ctx.font='12px Courier New';ctx.textAlign='center';
+    const tw=ctx.measureText(nm).width+12;
+    ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fillRect(Wpx/2-tw/2,hy-22,tw,16);
+    ctx.fillStyle='#FFE';ctx.fillText(nm,Wpx/2,hy-9);
+  }
+}
+
+function drawItemSlot(item,x,y,size) {
+  if(item.type==='block') {
+    const def=BD[item.id];if(!def||!def.color)return;
+    ctx.fillStyle=def.color;ctx.fillRect(x,y,size,size);
+    if(def.top&&def.top!==def.color){ctx.fillStyle=def.top;ctx.fillRect(x,y,size,4);}
+    if(def.spots){ctx.fillStyle=def.spots;ctx.fillRect(x+4,y+4,6,6);ctx.fillRect(x+12,y+12,5,5);}
+    ctx.fillStyle='rgba(255,255,255,0.2)';ctx.fillRect(x,y,size,2);ctx.fillRect(x,y,2,size);
+    if(item.count>1){ctx.fillStyle='#FFF';ctx.font=`bold 10px Courier New`;ctx.textAlign='right';ctx.fillText(item.count,x+size,y+size);}
+  } else if(item.type==='food') {
+    ctx.fillStyle=item.color||'#EE2200';ctx.fillRect(x,y,size,size);
+    ctx.font=`${size*0.6}px serif`;ctx.textAlign='center';ctx.fillText(item.icon||'?',x+size/2,y+size*0.7);
+    if(item.count>1){ctx.fillStyle='#FFF';ctx.font=`bold 10px Courier New`;ctx.textAlign='right';ctx.fillText(item.count,x+size,y+size);}
+  } else {
+    const icons={w_sword:'⚔',s_sword:'⚔',i_sword:'⚔',d_sword:'💎',bow:'🏹',w_pick:'⛏',s_pick:'⛏',i_pick:'⛏',w_axe:'🪓',s_axe:'🪓',i_axe:'🪓'};
+    ctx.font=`${size*0.6}px serif`;ctx.textAlign='center';ctx.fillText(icons[item.id]||'?',x+size/2,y+size*0.7);
+  }
+}
+
+function drawHealth() {
+  const hx=10,hy=Hpx-98;
+  ctx.fillStyle='#FFF';ctx.font='bold 10px Courier New';ctx.textAlign='left';ctx.fillText('❤',hx,hy);
+  for(let i=0;i<player.maxHealth/2;i++){
+    const bx=hx+16+i*19, by=hy-12;
+    ctx.fillStyle=i<Math.floor(player.health/2)?'#CC0000':i<player.health/2?'#FF6666':'#444';
+    ctx.fillRect(bx,by,15,13);
+    ctx.fillStyle=i<player.health/2?'#880000':'#2A2A2A';ctx.fillRect(bx+2,by+2,11,9);
+  }
+}
+
+function drawFood() {
+  const hx=10,hy=Hpx-74;
+  ctx.fillStyle='#FFF';ctx.font='bold 10px Courier New';ctx.textAlign='left';ctx.fillText('🍗',hx,hy);
+  for(let i=0;i<player.maxFood/2;i++){
+    const bx=hx+20+i*19, by=hy-12;
+    const pct=player.food/2;
+    ctx.fillStyle=i<Math.floor(pct)?'#AA6600':i<pct?'#CC8800':'#444';
+    ctx.fillRect(bx,by,15,13);
+    ctx.fillStyle=i<pct?'#773300':'#2A2A2A';ctx.fillRect(bx+2,by+2,11,9);
+  }
+  // Hunger warning
+  if(player.food<6&&tick%30<15){ctx.fillStyle='#FF8800';ctx.font='bold 11px Courier New';ctx.textAlign='left';ctx.fillText('⚠ Hungry! Press G to eat',hx,hy+14);}
+}
+
+function drawXPBar() {
+  const bw=220,hx=Wpx/2-bw/2,hy=Hpx-120;
+  ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(hx,hy,bw,7);
+  const xpN=(player.xp%Math.max(1,(player.level+1)*50))/Math.max(1,(player.level+1)*50);
+  ctx.fillStyle='#00EE00';ctx.fillRect(hx,hy,bw*xpN,7);
+  ctx.fillStyle='#FFF';ctx.font='10px Courier New';ctx.textAlign='center';
+  ctx.fillText(`Lv${player.level} | ${player.xp} XP`,Wpx/2,hy-2);
+}
+
+function drawClock() {
+  const n=(time%DAY)/DAY;
+  const hr=Math.floor(n*24),mn=Math.floor((n*24-hr)*60);
+  const ts=`${String(hr).padStart(2,'0')}:${String(mn).padStart(2,'0')}`;
+  const isDay=getDayF()>0.08;
+  ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fillRect(Wpx-130,6,124,24);
+  ctx.fillStyle=isDay?'#FFD700':'#AAAAFF';ctx.font='bold 13px Courier New';ctx.textAlign='right';
+  ctx.fillText((isDay?'☀ ':'☾ ')+ts,Wpx-8,23);
+}
+
+function drawBiomeTag() {
+  const bio=getBiome(Math.floor((player.x+cam.x)/BS));
+  const biomeNames={plains:'🌿 Plains',forest:'🌲 Forest',desert:'🏜 Desert',mountain:'⛰ Mountain'};
+  ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(Wpx-130,34,124,20);
+  ctx.fillStyle='#AEF';ctx.font='11px Courier New';ctx.textAlign='right';
+  ctx.fillText(biomeNames[bio]||bio,Wpx-8,48);
+}
+
+function drawMsgs() {
+  const now=Date.now();
+  msgs=msgs.filter(m=>now-m.t<5000);
+  msgs.slice(-7).forEach((m,i)=>{
+    const age=(now-m.t)/5000, op=Math.max(0,1-age*2.2);
+    ctx.globalAlpha=op;
+    ctx.font='12px Courier New';ctx.textAlign='left';
+    const tw=ctx.measureText(m.text).width;
+    ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(6,Hpx/2-100+i*18,tw+10,15);
+    ctx.fillStyle='#FFF';ctx.fillText(m.text,10,Hpx/2-88+i*18);
+    ctx.globalAlpha=1;
+  });
+}
+
+function drawCross() {
+  const cx=Wpx/2,cy=Hpx/2;
+  ctx.strokeStyle='rgba(255,255,255,0.85)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(cx-12,cy);ctx.lineTo(cx+12,cy);ctx.moveTo(cx,cy-12);ctx.lineTo(cx,cy+12);ctx.stroke();
+}
+
+function drawMinimap() {
+  const mw=110,mh=64,mx=Wpx-mw-6,my=58;
+  ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(mx,my,mw,mh);
+  const scaleX=mw/BS/22, scaleY=mh/WH;
+  const offX=Math.floor(player.x/BS)-11;
+  for(let bx=offX;bx<offX+22;bx++) {
+    for(let by=0;by<WH;by++) {
+      const b=gB(bx,by);if(!b||!BD[b]||!BD[b].color||b===B.AIR) continue;
+      const col=BD[b].top||BD[b].color;
+      if(col.startsWith('rgba')||col.startsWith('rgb(30')) continue;
+      ctx.fillStyle=col;
+      ctx.fillRect(mx+(bx-offX)*scaleX*BS,my+by*scaleY,Math.ceil(scaleX*BS)+1,Math.ceil(scaleY)+1);
+    }
+  }
+  ctx.fillStyle='#FFF';ctx.fillRect(mx+mw/2-2,my+(player.y/BS)*scaleY-1,4,4);
+  ctx.strokeStyle='#888';ctx.lineWidth=1;ctx.strokeRect(mx,my,mw,mh);
+  ctx.fillStyle='rgba(255,255,255,0.7)';ctx.font='8px Courier New';ctx.textAlign='left';ctx.fillText('MAP',mx+3,my+10);
+  // Coords
+  ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(mx,my+mh+2,mw,14);
+  ctx.fillStyle='#AAA';ctx.font='9px Courier New';ctx.textAlign='center';
+  ctx.fillText(`X:${Math.floor(player.x/BS)} Y:${Math.floor(player.y/BS)}`,mx+mw/2,my+mh+12);
+}
+
+function drawControls() {
+  const lines=['WASD=Move','Space=Jump','LClick=Mine','RClick=Place/Talk','F=Attack','G=Eat','E=Inventory','T=Toolbox','Q=Drop','R=Respawn'];
+  ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(5,5,140,lines.length*14+8);
+  ctx.font='9px Courier New';ctx.textAlign='left';
+  lines.forEach((l,i)=>{ctx.fillStyle='#AAA';ctx.fillText(l,10,18+i*14);});
+}
+
+function drawInventory() {
+  ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(0,0,Wpx,Hpx);
+  const iw=470,ih=400,ix=Wpx/2-iw/2,iy=Hpx/2-ih/2;
+  ctx.fillStyle='#5A5A5A';ctx.fillRect(ix,iy,iw,ih);
+  ctx.fillStyle='#444';ctx.fillRect(ix+4,iy+4,iw-8,ih-8);
+  ctx.fillStyle='#FFF';ctx.font='bold 16px Courier New';ctx.textAlign='center';ctx.fillText('⊞ INVENTORY',Wpx/2,iy+24);
+  ctx.fillStyle='#999';ctx.font='10px Courier New';ctx.fillText('E=close | 1-9=slot | RClick=place | G=eat held | T=Toolbox',Wpx/2,iy+40);
+
+  const SZ=42,gx=ix+12,gy=iy+50;
+  for(let row=0;row<4;row++) for(let col=0;col<9;col++) {
+    const idx=row*9+col, sx=gx+col*SZ, sy=gy+row*SZ;
+    ctx.fillStyle=idx===player.hotbar?'rgba(255,255,150,0.18)':'rgba(0,0,0,0.4)';
+    ctx.fillRect(sx+1,sy+1,SZ-2,SZ-2);
+    ctx.strokeStyle='#777';ctx.lineWidth=1;ctx.strokeRect(sx,sy,SZ,SZ);
+    if(player.inventory[idx]) drawItemSlot(player.inventory[idx],sx+4,sy+4,SZ-8);
+    ctx.fillStyle='#666';ctx.font='8px Courier New';ctx.textAlign='left';ctx.fillText(idx<9?idx+1:'',sx+2,sy+SZ-2);
+  }
+
+  // Process inventory clicks
+  if(invClick) {
+    const ic=invClick; invClick=null;
+    for(let row=0;row<4;row++) for(let col=0;col<9;col++){
+      const idx=row*9+col, sx=gx+col*SZ, sy=gy+row*SZ;
+      if(ic.x>sx&&ic.x<sx+SZ&&ic.y>sy&&ic.y<sy+SZ) {
+        const item=player.inventory[idx];
+        if(item) {
+          if(item.type==='food') {player.hotbar=idx;eatHeld();}
+          else {player.hotbar=idx%9;msg(`Selected: ${item.name||(BD[item.id]&&BD[item.id].name)||'?'}`);}
         }
       }
+    }
+  }
 
-      :host(:popover-open),
-      :host(:popover-open):before {
-        animation-name: tooltip-appear;
-        animation-duration: .1s;
-        animation-fill-mode: forwards;
-        animation-timing-function: ease-in;
-      }
+  // Food info panel
+  ctx.fillStyle='#FFF';ctx.font='bold 12px Courier New';ctx.textAlign='left';
+  ctx.fillText('🍴 Foods in inventory:',ix+12,iy+226);
+  let fx=ix+12, fi=0;
+  player.inventory.forEach((item,i)=>{
+    if(!item||item.type!=='food') return;
+    const fd=item;
+    const rx=fx+fi*155, ry=iy+232;
+    ctx.fillStyle='rgba(0,0,0,0.4)';ctx.fillRect(rx,ry,148,52);
+    ctx.fillStyle=fd.color||'#AA3322';ctx.fillRect(rx,ry,148,52);
+    ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(rx,ry,148,52);
+    ctx.font='${fd.icon?28:16}px serif';ctx.textAlign='center';ctx.fillText(fd.icon||'🍴',rx+74,ry+28);
+    ctx.font='bold 10px Courier New';ctx.fillStyle='#FFF';ctx.fillText(`${fd.name} x${fd.count}`,rx+74,ry+42);
+    ctx.fillStyle='#AFA';ctx.font='9px Courier New';ctx.fillText(`+${fd.restore} food | Slot ${i+1}`,rx+74,ry+52);
+    fi++;
+  });
+  if(fi===0){ctx.fillStyle='#888';ctx.font='11px Courier New';ctx.textAlign='left';ctx.fillText('No food! Mine leaves for apples, kill animals for meat.',ix+12,iy+262);}
+}
 
-      :host(.\:popover-open) {
-        animation-name: tooltip-appear;
-        animation-duration: .1s;
-        animation-fill-mode: forwards;
-        animation-timing-function: ease-in;
-      }
+function drawToolbox() {
+  ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(0,0,Wpx,Hpx);
+  const tw=520,th=480,tx=Wpx/2-tw/2,ty=Hpx/2-th/2;
+  ctx.fillStyle='#4A3A2A';ctx.fillRect(tx,ty,tw,th);
+  ctx.fillStyle='#382A1A';ctx.fillRect(tx+4,ty+4,tw-8,th-8);
+  ctx.fillStyle='#FFE082';ctx.font='bold 18px Courier New';ctx.textAlign='center';ctx.fillText('⚒ TOOLBOX & CRAFTING',Wpx/2,ty+26);
+  ctx.fillStyle='#AA8855';ctx.font='10px Courier New';ctx.fillText('T=close | Scroll=navigate | Click [CRAFT] to craft',Wpx/2,ty+42);
 
-      @media (forced-colors: active) {
-        :host {
-          outline: solid 1px transparent;
-        }
+  // Categories filter
+  const cats=['All','Materials','Weapons','Tools','Food'];
+  cats.forEach((c,i)=>{
+    const bx=tx+12+i*96, by=ty+50;
+    ctx.fillStyle=toolCat===c?'#CC9933':'#5A4A2A';ctx.fillRect(bx,by,88,20);
+    ctx.fillStyle=toolCat===c?'#000':'#FFE';ctx.font='bold 10px Courier New';ctx.textAlign='center';ctx.fillText(c,bx+44,by+14);
+    if(toolClick&&toolClick.x>bx&&toolClick.x<bx+88&&toolClick.y>by&&toolClick.y<by+20){toolCat=c;toolClick=null;}
+  });
 
-        :host:before {
-          display: none;
-        }
-      }
-    </style><slot></slot></template>Dismiss alert</tool-tip>
+  const filtered=RECIPES.filter(r=>toolCat==='All'||r.cat===toolCat);
+  const RSLOT=58, MAX_VIS=Math.floor((th-95)/RSLOT);
+  toolScroll=Math.max(0,Math.min(toolScroll,Math.max(0,filtered.length-MAX_VIS)));
+  const vis=filtered.slice(toolScroll,toolScroll+MAX_VIS);
+  const listY=ty+76;
 
+  vis.forEach((r,i)=>{
+    const ry=listY+i*RSLOT;
+    const craftable=canCraft(r);
+    ctx.fillStyle=craftable?'rgba(0,80,0,0.5)':'rgba(40,40,40,0.5)';ctx.fillRect(tx+10,ry,tw-20,RSLOT-4);
+    ctx.strokeStyle=craftable?'#4CAF50':'#555';ctx.lineWidth=1;ctx.strokeRect(tx+10,ry,tw-20,RSLOT-4);
 
+    // Result icon
+    const res=r.result;
+    if(res.type==='block'&&BD[res.id]&&BD[res.id].color){
+      ctx.fillStyle=BD[res.id].color;ctx.fillRect(tx+16,ry+8,36,36);
+      if(BD[res.id].top&&BD[res.id].top!==BD[res.id].color){ctx.fillStyle=BD[res.id].top;ctx.fillRect(tx+16,ry+8,36,5);}
+    } else if(res.type==='food') {
+      ctx.fillStyle=res.color||'#AA3322';ctx.fillRect(tx+16,ry+8,36,36);
+      ctx.font='20px serif';ctx.textAlign='center';ctx.fillText(res.icon||'?',tx+34,ry+32);
+    } else {
+      ctx.fillStyle='#333';ctx.fillRect(tx+16,ry+8,36,36);
+      const icons2={w_sword:'⚔',s_sword:'⚔',i_sword:'⚔',d_sword:'💎',bow:'🏹',w_pick:'⛏',s_pick:'⛏',i_pick:'⛏',w_axe:'🪓',s_axe:'🪓',i_axe:'🪓'};
+      ctx.font='20px serif';ctx.textAlign='center';ctx.fillText(icons2[res.id]||'?',tx+34,ry+32);
+    }
+    ctx.fillRect(tx+16,ry+8,36,36);
+
+    // Name + result
+    ctx.fillStyle=craftable?'#FFE082':'#AAA';ctx.font='bold 12px Courier New';ctx.textAlign='left';
+    ctx.fillText(r.name,tx+60,ry+18);
+    ctx.fillStyle='#888';ctx.font='9px Courier New';ctx.fillText(`→ ${res.count}x | ${r.cat}`,tx+60,ry+30);
+
+    // Requirements
+    let reqX=tx+60;
+    r.req.forEach(rq=>{
+      const have=countInInv(rq.id);
+      const ok=have>=rq.count;
+      const nm=BD[rq.id]?BD[rq.id].name:'?';
+      ctx.fillStyle=ok?'#88FF88':'#FF8888';ctx.font='9px Courier New';
+      ctx.fillText(`${nm}: ${have}/${rq.count}`,reqX,ry+43);
+      reqX+=130;
+    });
+
+    // Craft button
+    const bx=tx+tw-80, bby=ry+10;
+    ctx.fillStyle=craftable?'#2E7D32':'#555';ctx.fillRect(bx,bby,68,36);
+    ctx.fillStyle=craftable?'#FFF':'#888';ctx.font='bold 11px Courier New';ctx.textAlign='center';ctx.fillText('CRAFT',bx+34,bby+23);
+    if(toolClick&&toolClick.x>bx&&toolClick.x<bx+68&&toolClick.y>bby&&toolClick.y<bby+36){doCraft(r);toolClick=null;}
+  });
+
+  // Scrollbar
+  if(filtered.length>MAX_VIS){
+    const sh=th-95, sb=tx+tw-18, sy2=ty+76;
+    ctx.fillStyle='#333';ctx.fillRect(sb,sy2,10,sh);
+    const sbh=Math.max(30,sh*MAX_VIS/filtered.length);
+    const sbY=sy2+toolScroll/Math.max(1,filtered.length-MAX_VIS)*(sh-sbh);
+    ctx.fillStyle='#AA8844';ctx.fillRect(sb,sbY,10,sbh);
+  }
+  toolClick=null;
+}
+
+let toolCat='All';
+
+function drawDeath() {
+  ctx.fillStyle='rgba(180,0,0,0.6)';ctx.fillRect(0,0,Wpx,Hpx);
+  ctx.fillStyle='#FFF';ctx.font='bold 56px Courier New';ctx.textAlign='center';ctx.fillText('YOU DIED',Wpx/2,Hpx/2-50);
+  ctx.font='22px Courier New';ctx.fillText('Press R to Respawn',Wpx/2,Hpx/2+20);
+  ctx.fillStyle='#FFAAAA';ctx.font='14px Courier New';ctx.fillText('Score: '+player.xp+' XP | Level '+player.level,Wpx/2,Hpx/2+60);
+}
+
+function msg(t) {msgs.push({text:t.substring(0,65),t:Date.now()});if(msgs.length>40)msgs.shift();}
+
+/* ============ INPUT ============ */
+/* ============ MOBILE TOUCH CONTROLS ============ */
+
+// 1. Link Movement Buttons to Keyboard Keys
+function bindHoldBtn(id, key) {
+  const el = document.getElementById(id);
+  if(!el) return;
+  const press = (e) => { e.preventDefault(); keys[key] = true; };
+  const release = (e) => { e.preventDefault(); keys[key] = false; };
   
-</div>
-        
-          
-    </div>
+  el.addEventListener('touchstart', press, {passive: false});
+  el.addEventListener('touchend', release);
+}
+bindHoldBtn('b-left', 'ArrowLeft');
+bindHoldBtn('b-right', 'ArrowRight');
+bindHoldBtn('b-up', 'Space');
 
-  <div id="start-of-content" class="show-on-focus"></div>
+// 2. Link Action Buttons to Game Functions
+function bindClickBtn(id, action) {
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.addEventListener('touchstart', (e) => { e.preventDefault(); action(); }, {passive: false});
+}
+bindClickBtn('b-atk', () => { player.atk = 10; attackNearby(); });
+bindClickBtn('b-place', interactNearby);
+bindClickBtn('b-eat', eatHeld);
 
-
-
-
-
-
-
-
-    <div id="js-flash-container" class="flash-container" data-turbo-replace="">
-
-
-
-
-  <template class="js-flash-template"></template>
-</div>
-
-
-    
-  <notification-shelf-watcher data-base-url="https://github.com/notifications/beta/shelf" data-channel="eyJjIjoibm90aWZpY2F0aW9uLWNoYW5nZWQ6MjcxNTA1OTEyIiwidCI6MTc3NDcxMTIyNX0=--31613d49f0fdc10265c311ca897eb1455c324a546411f158db0cbfb7db8244f5" data-view-component="true" class="js-socket-channel" data-refresh-delay="500" data-catalyst="" data-throttle-delay="5000"></notification-shelf-watcher>
-  <div hidden="" data-initial="" data-target="notification-shelf-watcher.placeholder"></div>
-
-
-
-
-
-
-  <div class="application-main " data-commit-hovercards-enabled="" data-discussion-hovercards-enabled="" data-issue-and-pr-hovercards-enabled="" data-project-hovercards-enabled="">
-        <div itemscope="" itemtype="http://schema.org/SoftwareSourceCode" class="">
-    <main id="js-repo-pjax-container">
-      
+// 3. Handle Canvas Touching (Mining and Hotbar selection)
+window.addEventListener('touchstart', e => {
+  // Ignore if we are touching a UI button
+  if(e.target.closest('#mobile-ui')) return; 
   
-    
-
-
-
-
-
-
+  const touch = e.touches[0];
+  mouse.x = touch.clientX;
+  mouse.y = touch.clientY;
   
-    
-
-  <div id="repository-container-header" data-turbo-replace="" hidden=""></div>
-
-
-
-<turbo-frame id="repo-content-turbo-frame" target="_top" data-turbo-action="advance" class="" src="https://github.com/studychannel/2dminecraft/upload" complete="">
-    
-    
-<div class="clearfix container-xl tmp-px-3 tmp-px-md-4 tmp-px-lg-5 tmp-mt-4">
-  <h1 class="sr-only">Uploading files to 2dminecraft</h1>
-
-  <div class="breadcrumb repo-upload-breadcrumb">
-    <h2 class="sr-only">Breadcrumbs</h2>
-    <span class="css-truncate-target">
-      <span class="js-repo-root text-bold"><span class="js-path-segment d-inline-block wb-break-all"><a href="https://github.com/studychannel/2dminecraft/upload/main"><span>2dminecraft</span></a></span></span><span class="separator">/</span>
-    </span>
-  </div>
-
-    <h2 class="sr-only">Upload files</h2>
-    <div class="js-upload-manifest-file-container">
-      <!-- '"` --><!-- </textarea></xmp> --><form class="d-none js-upload-manifest-form" data-turbo="false" action="https://github.com/upload/manifests" accept-charset="UTF-8" method="post"><input type="hidden" name="authenticity_token" value="ThaAaPKlNDYnZclgDiywYALwb6roeg-H4FxR_JpmJRDp9cy_xAapLekMEQ7w8OuCQXAkPcntHe_JhFxOuRdyCA">
-        <input type="hidden" name="repository_id" value="1194599911">
-        <input type="hidden" name="directory_binary" value="">
-</form>
-      <!-- '"` --><!-- </textarea></xmp> --><form data-turbo="false" action="https://github.com/upload/upload-manifest-files" accept-charset="UTF-8" method="post"><input type="hidden" name="authenticity_token" value="_7URWJZjXOmR3bu3q68xotxKz971u9sDx4nZO3r7d5vCraI94GV81vpKQA4XN1pAtLPFUkn8DzipeCVcEHvJMw">
-        <file-attachment class="d-block tmp-mb-3 Box blankslate blankslate-spacious js-upload-manifest-file repo-file-upload-target is-file-list is-default" input="upload-manifest-files-input" data-upload-repository-id="1194599911" data-directory-upload-max-files="100" directory="true" data-upload-policy-url="/upload/policies/upload-manifest-files"><input type="hidden" value="VvZRuoRGYhInds95EojE8rRxVMAfc7fHWCF6h2xDOIZ8t6FtKXMWbS5ZqoeIaMzJ2m9-QrRPUaeJDfuZD0giGw" data-csrf="true" class="js-data-upload-policy-url-csrf">
-
-          <div class="repo-file-upload-outline"></div>
-          <svg height="32" aria-hidden="true" viewBox="0 0 24 24" version="1.1" width="32" data-view-component="true" class="octicon octicon-file mb-2 color-fg-muted">
-    <path d="M3 3a2 2 0 0 1 2-2h9.982a2 2 0 0 1 1.414.586l4.018 4.018A2 2 0 0 1 21 7.018V21a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Zm2-.5a.5.5 0 0 0-.5.5v18a.5.5 0 0 0 .5.5h14a.5.5 0 0 0 .5-.5V8.5h-4a2 2 0 0 1-2-2v-4Zm10 0v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 0-.146-.336l-4.018-4.018A.5.5 0 0 0 15 2.5Z"></path>
-</svg>
-          <span class="repo-file-upload-text initial-text h2">Drag files here to add them to your repository</span>
-          <span class="repo-file-upload-text alternate-text h2">Drag additional files here to add them to your repository</span>
-          <span class="repo-file-upload-drop-text h2">Drop to upload your files</span>
-
-          <p class="repo-file-upload-choose">
-            Or
-            <input type="file" multiple="" class="manual-file-chooser" id="upload-manifest-files-input" aria-label="Choose your files">
-            <span class="manual-file-chooser-text btn-link" aria-hidden="true" tabindex="-1">choose your files</span>
-          </p>
-
-          <div class="repo-file-upload-errors">
-            <span class="error too-big">
-              Yowza, that’s a big file. Try again with a file smaller than 25MB.
-            </span>
-            <span class="error too-many">
-              Yowza, that’s a lot of files. Try uploading fewer than 100 at a time.
-            </span>
-            <span class="error empty">
-              This file is empty.
-            </span>
-            <span class="error hidden-file">
-              This file is hidden.
-            </span>
-            <span class="error failed-request">
-              Something went really wrong, and we can’t process that file.
-            </span>
-          </div>
-</file-attachment></form>
-      <div class="tmp-mb-3 js-upload-progress" hidden="">
-        <div class="mb-2 f4 js-upload-meter-text">
-          <div class="d-flex flex-items-center mb-1">
-            <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-file mr-2">
-    <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z"></path>
-</svg>
-            <div class="js-upload-meter-filename"></div>
-          </div>
-          <div class="f6">
-            Uploading <span class="js-upload-meter-range-start">1</span> of <span class="js-upload-meter-range-end">1</span> files
-          </div>
-        </div>
-        <div class="Progress Progress--large">
-          <span class="color-bg-success-emphasis js-upload-meter" style="width: 100%;"></span>
-        </div>
-      </div>
-    </div>
-
-    <div class="js-manifest-commit-file-template" hidden="">
-      <div class="js-manifest-file-entry Box-row d-flex">
-        <div class="mr-2 flex-shrink-0">
-          <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-file">
-    <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z"></path>
-</svg>
-        </div>
-        <div class="js-filename flex-auto min-width-0 css-truncate css-truncate-target width-fit tmp-mr-3"></div>
-        <!-- '"` --><!-- </textarea></xmp> --><form class="js-remove-manifest-file-form" data-turbo="false" action="https://github.com/studychannel/2dminecraft/upload" accept-charset="UTF-8" method="post"><input type="hidden" name="_method" value="delete" autocomplete="off"><input type="hidden" name="authenticity_token" value="vinNLGTNdE7GK3heczYMDGo3C9Lf0-QzLMRguSFBti-RMU5A2TYn4fNWEYJjH7fEfy2U0p0dVc51aXkO_zB1iA">
-          <input type="hidden" name="file_id" value="">
-            <button aria-label="Remove this file" type="submit" data-view-component="true" class="Link--primary btn-link">    <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x">
-    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
-</svg>
-</button></form>      </div>
-    </div>
-
-    <div class="Box tmp-mb-3 js-manifest-file-list">
-      <div class="js-manifest-file-list-root"><div class="js-manifest-file-entry Box-row d-flex">
-        <div class="mr-2 flex-shrink-0">
-          <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-file">
-    <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z"></path>
-</svg>
-        </div>
-        <div class="js-filename flex-auto min-width-0 css-truncate css-truncate-target width-fit tmp-mr-3">2Dmincraft.html</div>
-        <!-- '"` --><!-- </textarea></xmp> --><form class="js-remove-manifest-file-form" data-turbo="false" action="https://github.com/studychannel/2dminecraft/upload" accept-charset="UTF-8" method="post"><input type="hidden" name="_method" value="delete" autocomplete="off"><input type="hidden" name="authenticity_token" value="vinNLGTNdE7GK3heczYMDGo3C9Lf0-QzLMRguSFBti-RMU5A2TYn4fNWEYJjH7fEfy2U0p0dVc51aXkO_zB1iA">
-          <input type="hidden" name="file_id" value="3061431538">
-            <button aria-label="Remove 2Dmincraft.html" type="submit" data-view-component="true" class="Link--primary btn-link">    <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x">
-    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
-</svg>
-</button></form>      </div></div>
-    </div>
-
-    <!-- '"` --><!-- </textarea></xmp> --><form class="file-commit-form manifest-commit-form js-file-commit-form js-manifest-commit-form" data-turbo="false" action="https://github.com/studychannel/2dminecraft/upload" accept-charset="UTF-8" method="post"><input type="hidden" name="authenticity_token" value="h6B9SGGtru7i3P_mcVtpiIh4gIoN0CtOfru0K42E9_KVp46JLk68vNCTLfiCQnAcxl1wThzJ6hrR2fe21aubQQ">
-      <img class="commit-form-avatar float-left rounded-2 avatar-user" src="./2dminecraft_files/271505912(1)" width="48" height="48" alt="@studychannel">
-
-      <div class="commit-form position-relative tmp-p-3 mb-2 border rounded-2" data-hpc="true">
-        <h3>Commit changes</h3>
-
-        <div class="color-fg-severe js-too-long-error d-none">
-          <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-light-bulb">
-    <path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path>
-</svg>
-          <strong>ProTip!</strong> Great commit summaries contain fewer than 50 characters. Place extra information in the extended description.
-        </div>
-
-        <label for="commit-summary-input" class="sr-only">
-          Commit summary
-        </label>
-        <input id="commit-summary-input" type="text" class="form-control input-block input-contrast js-new-blob-commit-summary js-quick-submit" placeholder="Add files via upload" autocomplete="off" name="message">
-
-        <label for="commit-description-textarea" class="sr-only">
-          Optional extended description
-        </label>
-        <textarea id="commit-description-textarea" name="description" class="form-control input-block input-contrast comment-form-textarea js-quick-submit" placeholder="Add an optional extended description…"></textarea>
-
-        
-
-          <input type="hidden" name="commit-choice" value="direct">
-        <input type="hidden" name="manifest_id" value="356868149">
-      </div>
-
-        <button data-edit-text="Commit changes" data-pull-text="Propose changes" type="submit" data-view-component="true" class="js-blob-submit btn-primary btn">    Commit changes
-</button>
-      <a class="btn btn-danger" href="https://github.com/studychannel/2dminecraft">Cancel</a>
-</form>
-</div>
-
-  </turbo-frame>
-
-
-    </main>
-  </div>
-
-  </div>
-
-          <footer class="footer tmp-pt-7 tmp-pb-6 f6 color-fg-muted color-border-subtle p-responsive" role="contentinfo">
-  <h2 class="sr-only">Footer</h2>
-
+  // Check if player tapped the Hotbar UI
+  const hbY = Hpx - 60;
+  const hbX = Wpx / 2 - 180;
+  if(mouse.y > hbY - 10 && mouse.x > hbX && mouse.x < hbX + 370) {
+    const slot = Math.floor((mouse.x - hbX) / 40);
+    if(slot >= 0 && slot < 9) player.hotbar = slot;
+    return; // Don't swing pickaxe if selecting inventory
+  }
   
+  // Otherwise, start mining
+  mouse.left = true;
+}, {passive: false});
 
+window.addEventListener('touchmove', e => {
+  if(e.target.closest('#mobile-ui')) return;
+  const touch = e.touches[0];
+  mouse.x = touch.clientX;
+  mouse.y = touch.clientY;
+}, {passive: false});
 
-  <div class="d-flex flex-justify-center flex-items-center flex-column-reverse flex-lg-row flex-wrap flex-lg-nowrap">
-    <div class="d-flex flex-items-center flex-shrink-0 mx-2">
-      <a aria-label="GitHub Homepage" class="footer-octicon mr-2" href="https://github.com/">
-        <svg aria-hidden="true" height="24" viewBox="0 0 24 24" version="1.1" width="24" data-view-component="true" class="octicon octicon-mark-github">
-    <path d="M10.226 17.284c-2.965-.36-5.054-2.493-5.054-5.256 0-1.123.404-2.336 1.078-3.144-.292-.741-.247-2.314.09-2.965.898-.112 2.111.36 2.83 1.01.853-.269 1.752-.404 2.853-.404 1.1 0 1.999.135 2.807.382.696-.629 1.932-1.1 2.83-.988.315.606.36 2.179.067 2.942.72.854 1.101 2 1.101 3.167 0 2.763-2.089 4.852-5.098 5.234.763.494 1.28 1.572 1.28 2.807v2.336c0 .674.561 1.056 1.235.786 4.066-1.55 7.255-5.615 7.255-10.646C23.5 6.188 18.334 1 11.978 1 5.62 1 .5 6.188.5 12.545c0 4.986 3.167 9.12 7.435 10.669.606.225 1.19-.18 1.19-.786V20.63a2.9 2.9 0 0 1-1.078.224c-1.483 0-2.359-.808-2.987-2.313-.247-.607-.517-.966-1.034-1.033-.27-.023-.359-.135-.359-.27 0-.27.45-.471.898-.471.652 0 1.213.404 1.797 1.235.45.651.921.943 1.483.943.561 0 .92-.202 1.437-.719.382-.381.674-.718.944-.943"></path>
-</svg>
-</a>
-      <span>
-        © 2026 GitHub,&nbsp;Inc.
-      </span>
-    </div>
-
-    <nav aria-label="Footer">
-      <h3 class="sr-only" id="sr-footer-heading">Footer navigation</h3>
-
-      <ul class="list-style-none d-flex flex-justify-center flex-wrap mb-2 mb-lg-0" aria-labelledby="sr-footer-heading">
-
-
-          <li class="mx-2">
-            <a data-analytics-event="{&quot;category&quot;:&quot;Footer&quot;,&quot;action&quot;:&quot;go to Terms&quot;,&quot;label&quot;:&quot;text:terms&quot;}" href="https://docs.github.com/site-policy/github-terms/github-terms-of-service" data-view-component="true" class="Link--secondary Link">Terms</a>
-          </li>
-
-          <li class="mx-2">
-            <a data-analytics-event="{&quot;category&quot;:&quot;Footer&quot;,&quot;action&quot;:&quot;go to privacy&quot;,&quot;label&quot;:&quot;text:privacy&quot;}" href="https://docs.github.com/site-policy/privacy-policies/github-privacy-statement" data-view-component="true" class="Link--secondary Link">Privacy</a>
-          </li>
-
-          <li class="mx-2">
-            <a data-analytics-event="{&quot;category&quot;:&quot;Footer&quot;,&quot;action&quot;:&quot;go to security&quot;,&quot;label&quot;:&quot;text:security&quot;}" href="https://github.com/security" data-view-component="true" class="Link--secondary Link">Security</a>
-          </li>
-
-          <li class="mx-2">
-            <a data-analytics-event="{&quot;category&quot;:&quot;Footer&quot;,&quot;action&quot;:&quot;go to status&quot;,&quot;label&quot;:&quot;text:status&quot;}" href="https://www.githubstatus.com/" data-view-component="true" class="Link--secondary Link">Status</a>
-          </li>
-
-          <li class="mx-2">
-            <a data-analytics-event="{&quot;category&quot;:&quot;Footer&quot;,&quot;action&quot;:&quot;go to community&quot;,&quot;label&quot;:&quot;text:community&quot;}" href="https://github.community/" data-view-component="true" class="Link--secondary Link">Community</a>
-          </li>
-
-          <li class="mx-2">
-            <a data-analytics-event="{&quot;category&quot;:&quot;Footer&quot;,&quot;action&quot;:&quot;go to docs&quot;,&quot;label&quot;:&quot;text:docs&quot;}" href="https://docs.github.com/" data-view-component="true" class="Link--secondary Link">Docs</a>
-          </li>
-
-          <li class="mx-2">
-            <a data-analytics-event="{&quot;category&quot;:&quot;Footer&quot;,&quot;action&quot;:&quot;go to contact&quot;,&quot;label&quot;:&quot;text:contact&quot;}" href="https://support.github.com/?tags=dotcom-footer" data-view-component="true" class="Link--secondary Link">Contact</a>
-          </li>
-
-          <li class="mx-2">
-  <cookie-consent-link data-catalyst="">
-    <button type="button" class="Link--secondary underline-on-hover border-0 p-0 color-bg-transparent" data-action="click:cookie-consent-link#showConsentManagement" data-analytics-event="{&quot;location&quot;:&quot;footer&quot;,&quot;action&quot;:&quot;cookies&quot;,&quot;context&quot;:&quot;subfooter&quot;,&quot;tag&quot;:&quot;link&quot;,&quot;label&quot;:&quot;cookies_link_subfooter_footer&quot;}">
-       Manage cookies
-    </button>
-  </cookie-consent-link>
-</li>
-
-<li class="mx-2">
-  <cookie-consent-link data-catalyst="">
-    <button type="button" class="Link--secondary underline-on-hover border-0 p-0 color-bg-transparent text-left" data-action="click:cookie-consent-link#showConsentManagement" data-analytics-event="{&quot;location&quot;:&quot;footer&quot;,&quot;action&quot;:&quot;dont_share_info&quot;,&quot;context&quot;:&quot;subfooter&quot;,&quot;tag&quot;:&quot;link&quot;,&quot;label&quot;:&quot;dont_share_info_link_subfooter_footer&quot;}">
-      Do not share my personal information
-    </button>
-  </cookie-consent-link>
-</li>
-
-      </ul>
-    </nav>
-  </div>
-</footer>
-
-
-
-    <ghcc-consent id="ghcc" class="position-fixed bottom-0 left-0" style="z-index: 999999" data-locale="en" data-initial-cookie-consent-allowed="" data-cookie-consent-required="false" data-catalyst=""></ghcc-consent>
+window.addEventListener('touchend', e => {
+  mouse.left = false;
+});
 
 
 
 
-  <div id="ajax-error-message" class="ajax-error-message flash flash-error" hidden="">
-    <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-alert">
-    <path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path>
-</svg>
-    <button type="button" class="flash-close js-ajax-error-dismiss" aria-label="Dismiss error">
-      <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x">
-    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
-</svg>
-    </button>
-    You can’t perform that action at this time.
-  </div>
+function setupInput() {
+  window.addEventListener('keydown',e=>{
+    keys[e.code]=true;
+    if(e.code.startsWith('Digit')){const n=parseInt(e.key)-1;if(n>=0&&n<9)player.hotbar=n;}
+    if(e.code==='KeyE'){showInv=!showInv;showTool=false;}
+    if(e.code==='KeyT'){showTool=!showTool;showInv=false;}
+    if(e.code==='KeyR'&&player.dead) respawn();
+    if((e.code==='KeyF'||e.code==='KeyZ')&&!showInv&&!showTool) attackNearby();
+    if(e.code==='KeyG') eatHeld();
+    if(e.code==='KeyQ'){const item=player.inventory[player.hotbar];if(item){msg('Dropped: '+(item.name||(BD[item.id]&&BD[item.id].name)||'?'));player.inventory[player.hotbar]=null;}}
+    e.preventDefault();
+  });
+  window.addEventListener('keyup',e=>keys[e.code]=false);
 
-    <template id="site-details-dialog"></template>
+  cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();mouse.x=e.clientX-r.left;mouse.y=e.clientY-r.top;});
+  cv.addEventListener('mousedown',e=>{
+    const r=cv.getBoundingClientRect();
+    const cx=e.clientX-r.left, cy=e.clientY-r.top;
+    if(e.button===0){
+      mouse.left=true;
+      if(showInv) invClick={x:cx,y:cy};
+      else if(showTool) toolClick={x:cx,y:cy};
+    }
+    if(e.button===2&&!showInv&&!showTool) interactNearby();
+  });
+  cv.addEventListener('mouseup',e=>{if(e.button===0)mouse.left=false;});
+  cv.addEventListener('contextmenu',e=>e.preventDefault());
+  cv.addEventListener('wheel',e=>{
+    if(showTool){toolScroll+=e.deltaY>0?1:-1;return;}
+    player.hotbar=(player.hotbar+(e.deltaY>0?1:-1)+9)%9;
+  });
+}
 
-    <div class="Popover js-hovercard-content position-absolute" style="display: none; outline: none;">
-  <div class="Popover-message Popover-message--bottom-left Popover-message--large Box color-shadow-large" style="width:360px;"></div>
-</div>
+/* ============ GAME LOOP ============ */
+function loop() {
+  tick++;
+  time+=1.2;
+  if(time>=DAY) time=0;
+  const xpNeed=(player.level+1)*50;
+  if(player.xp>=xpNeed){player.level++;msg('🌟 Level Up! You are Level '+player.level+'!');}
+  if(!showInv&&!showTool&&!player.dead){updPlayer();updEntities();updArrows();}
+  else if(player.dead&&keys['KeyR']) respawn();
+  render();
+  requestAnimationFrame(loop);
+}
 
-    <template id="snippet-clipboard-copy-button"></template>
-<template id="snippet-clipboard-copy-button-unpositioned"></template>
+/* ============ INIT ============ */
+function init() {
+  cv=document.getElementById('g');
+  ctx=cv.getContext('2d');
+  Wpx=window.innerWidth; Hpx=window.innerHeight;
+  cv.width=Wpx; cv.height=Hpx;
+  window.addEventListener('resize',()=>{Wpx=window.innerWidth;Hpx=window.innerHeight;cv.width=Wpx;cv.height=Hpx;});
 
+  // Pre-gen starting area
+  for(let i=-5;i<=5;i++) ens(i);
 
-    <style>
-      .user-mention[href$="/studychannel"] {
-        color: var(--color-user-mention-fg);
-        background-color: var(--bgColor-attention-muted, var(--color-attention-subtle));
-        border-radius: 2px;
-        margin-left: -2px;
-        margin-right: -2px;
-      }
-      .user-mention[href$="/studychannel"]:before,
-      .user-mention[href$="/studychannel"]:after {
-        content: '';
-        display: inline-block;
-        width: 2px;
-      }
-    </style>
+  player=mkPlayer();
+  player.x=0; const sy=tH(0); player.y=(sy-4)*BS;
+  giveStarter(player);
+  spawnInitial();
+  setupInput();
 
+  msg('🌍 Welcome to CraftWorld Infinite!');
+  msg('WASD=Move | LClick=Mine | RClick=Place/Talk to mobs');
+  msg('F=Attack | G=Eat food | E=Inventory | T=Toolbox ⚒');
+  msg('Walk left/right to explore INFINITE world with biomes! →');
+  requestAnimationFrame(loop);
+}
 
-    </div>
-    <div id="js-global-screen-reader-notice" class="sr-only mt-n1" aria-live="polite" aria-atomic="true"></div>
-    <div id="js-global-screen-reader-notice-assertive" class="sr-only mt-n1" aria-live="assertive" aria-atomic="true"></div>
-  
-
-
-</body></html>
+window.onload=init;
+</script>
+</body>
+</html>
